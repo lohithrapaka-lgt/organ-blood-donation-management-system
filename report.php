@@ -331,6 +331,26 @@ if ($reportData) {
                     </p>
                 </div>
 
+                <?php if ($s === 'fulfilled' && $type === 'blood_bank'): ?>
+                    <?php
+                    $rId = (int)($reportData['request_id'] ?? 0);
+                    $rToken = hash_hmac('sha256', 'blood_receipt_' . $rId, 'MediMatch_Secure_Receipt_Key_2026');
+                    $prot = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+                    $h = $_SERVER['HTTP_HOST'];
+                    $sDir = rtrim(str_replace('\\', '/', dirname($_SERVER['PHP_SELF'])), '/');
+                    $rVerifyUrl = "$prot://$h$sDir/verify_receipt.php?request_id=$rId&token=$rToken";
+                    ?>
+                    <div class="mt-4 p-4 bg-white border border-success border-opacity-25 rounded-4 shadow-sm text-center">
+                        <h6 class="fw-bold text-success text-uppercase small mb-3">
+                            <i class="bi bi-qr-code-scan me-2"></i>Digital QR Code Receipt
+                        </h6>
+                        <div id="reportQrCode" class="d-flex justify-content-center align-items-center mb-3"></div>
+                        <a href="<?php echo htmlspecialchars($rVerifyUrl); ?>" target="_blank" class="btn btn-sm btn-outline-success rounded-pill px-4 fw-bold">
+                            <i class="bi bi-shield-check me-1"></i>Verify Authentic Receipt
+                        </a>
+                    </div>
+                <?php endif; ?>
+
                 <?php endif; ?>
 
             </div>
@@ -358,5 +378,19 @@ if ($reportData) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        const reportQrUrl = <?php echo json_encode($rVerifyUrl ?? ''); ?>;
+        if (reportQrUrl && document.getElementById('reportQrCode')) {
+            new QRCode(document.getElementById("reportQrCode"), {
+                text: reportQrUrl,
+                width: 140,
+                height: 140,
+                colorDark: "#15803d",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+    </script>
 </body>
 </html>

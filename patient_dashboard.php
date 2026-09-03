@@ -260,10 +260,12 @@ try {
 
     // Step 7: Fetch latest request status
     $stmtMatch = $pdo->prepare("
-        SELECT 'blood_bank' as match_type, blood_group, status 
-        FROM blood_requests 
-        WHERE patient_id = ? 
-        ORDER BY request_id DESC LIMIT 1
+        SELECT 'blood_bank' as match_type, br.request_id, br.blood_group, br.status, br.units_needed, br.priority_score, br.request_date,
+               b.name AS bank_name, b.location AS bank_location
+        FROM blood_requests br
+        LEFT JOIN blood_banks b ON br.bank_id = b.bank_id
+        WHERE br.patient_id = ? 
+        ORDER BY br.request_id DESC LIMIT 1
     ");
     $stmtMatch->execute([$_SESSION['ref_id']]);
     $matchedDetails = $stmtMatch->fetch(PDO::FETCH_ASSOC);
@@ -283,7 +285,7 @@ try {
 
     // Step 6: Organ requests – fetched SEPARATELY so both cards can show simultaneously
     $stmtOrganDet = $pdo->prepare("
-        SELECT 'hospital' as match_type, o.organ_type, o.status,
+        SELECT 'hospital' as match_type, o.request_id, o.patient_id, o.organ_type, o.status, o.priority_score,
                h.name AS hospital_name, h.location, h.contact
         FROM organ_requests o
         JOIN hospitals h ON o.hospital_id = h.hospital_id
@@ -498,169 +500,362 @@ try {
 
                     <!-- Matched Donor/Request Section -->
                     <?php if ($matchedDetails): ?>
-                        <div class="card-custom mb-4"
-                            style="background: linear-gradient(135deg, <?php echo $matchedDetails['status'] === 'fulfilled' ? '#f0fff4' : '#fff5f5'; ?> 0%, #ffffff 100%); border: 1px solid <?php echo $matchedDetails['status'] === 'fulfilled' ? '#22c55e22' : '#ff084422'; ?>;">
-                            <div class="d-flex align-items-center mb-3">
-                                <div
-                                    class="<?php echo $matchedDetails['status'] === 'fulfilled' ? 'bg-success' : 'bg-danger'; ?> bg-opacity-10 rounded-circle p-3 me-3">
-                                    <i
-                                        class="bi <?php echo $matchedDetails['status'] === 'fulfilled' ? 'bi-check-all text-success' : 'bi-heart-pulse-fill text-danger'; ?> fs-3"></i>
-                                </div>
-                                <div>
-                                    <h4 class="fw-bold text-dark mb-0">
-                                        <?php
-                                        if ($matchedDetails['status'] === 'fulfilled')
-                                            echo 'Request Fulfilled!';
-                                        elseif ($matchedDetails['match_type'] === 'blood_bank')
-                                            echo 'Blood Request Pending';
-                                        elseif ($matchedDetails['match_type'] === 'hospital')
-                                            echo 'Organ Request Submitted';
-                                        else
-                                            echo 'Matched Donor for You!';
-                                        ?>
-                                    </h4>
-                                    <p class="text-muted mb-0 small text-uppercase fw-bold tracking-wider">
-                                        <?php
-                                        if ($matchedDetails['match_type'] === 'blood_bank')
-                                            echo 'Blood Bank Processing';
-                                        elseif ($matchedDetails['match_type'] === 'hospital')
-                                            echo 'Hospital Organ Request';
-                                        else
-                                            echo 'Automated System Match';
-                                        ?>
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
-                                        <?php if (($matchedDetails['match_type'] ?? '') === 'hospital'): ?>
-                                            <label class="text-muted small fw-bold text-uppercase d-block mb-1">Organ
-                                                Type</label>
-                                            <span class="badge bg-primary fs-5 px-3 rounded-pill"><i
-                                                    class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($matchedDetails['organ_type'] ?? 'N/A'); ?></span>
-                                        <?php else: ?>
-                                            <label class="text-muted small fw-bold text-uppercase d-block mb-1">Blood
-                                                Group</label>
-                                            <span
-                                                class="badge bg-danger fs-5 px-3 rounded-pill"><?php echo htmlspecialchars($matchedDetails['blood_group'] ?? 'N/A'); ?></span>
-                                        <?php endif; ?>
+                        <?php if ($matchedDetails['status'] === 'fulfilled' && ($matchedDetails['match_type'] ?? '') === 'blood_bank'): ?>
+                            <?php
+                            $reqId = (int)($matchedDetails['request_id'] ?? 0);
+                            $secToken = hash_hmac('sha256', 'blood_receipt_' . $reqId, 'MediMatch_Secure_Receipt_Key_2026');
+                            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+                            $host = $_SERVER['HTTP_HOST'];
+                            $scriptDir = dirname($_SERVER['PHP_SELF']);
+                            $scriptDir = rtrim(str_replace('\\', '/', $scriptDir), '/');
+                            $verifyUrl = "$protocol://$host$scriptDir/verify_receipt.php?request_id=$reqId&token=$secToken";
+                            ?>
+                            <div class="card-custom mb-4 border-2 border-success shadow-sm" style="background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);">
+                                <!-- Collapsed Header & Summary Row -->
+                                <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-success bg-opacity-10 text-success rounded-circle p-3 me-3 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px; flex-shrink: 0;">
+                                            <i class="bi bi-patch-check-fill fs-2"></i>
+                                        </div>
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <h4 class="fw-bold text-success mb-0">Blood Request Fulfilled</h4>
+                                                <span class="badge bg-success rounded-pill px-3 py-1 text-uppercase">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Fulfilled
+                                                </span>
+                                            </div>
+                                            <div class="text-muted small">
+                                                <span><strong>Patient:</strong> <?php echo htmlspecialchars($userProfile['name'] ?? 'Guest'); ?></span>
+                                                <span class="mx-2">·</span>
+                                                <span><strong>Group:</strong> <span class="badge bg-danger rounded-pill px-2 py-1"><?php echo htmlspecialchars($matchedDetails['blood_group'] ?? 'N/A'); ?></span></span>
+                                                <span class="mx-2">·</span>
+                                                <span><strong>Units:</strong> <?php echo htmlspecialchars($matchedDetails['units_needed'] ?? 1); ?> unit(s)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ms-md-auto">
+                                        <button type="button" id="toggleReceiptBtn" onclick="toggleReceiptPanel()" class="btn btn-success rounded-pill px-4 py-2 fw-bold shadow-sm">
+                                            <i class="bi bi-receipt me-2"></i>View Receipt <i class="bi bi-chevron-down ms-1" id="receiptChevron"></i>
+                                        </button>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
-                                        <label class="text-muted small fw-bold text-uppercase d-block mb-1">Status</label>
-                                        <?php
-                                        $status = $matchedDetails['status'];
-                                        $color = ($status === 'fulfilled' || $status === 'accepted') ? 'success' : (($status === 'pending') ? 'warning' : 'danger');
-                                        $icon = ($status === 'fulfilled') ? 'check-all' : (($status === 'accepted') ? 'check-circle' : (($status === 'pending') ? 'hourglass-split' : 'x-circle'));
-                                        ?>
-                                        <span class="badge bg-<?php echo $color; ?> fs-6 px-3 rounded-pill text-uppercase">
-                                            <i class="bi bi-<?php echo $icon; ?> me-1"></i>
-                                            <?php echo $status === 'fulfilled' ? 'Request Fulfilled' : htmlspecialchars($status); ?>
+
+                                <!-- Expandable Receipt Panel -->
+                                <div id="fulfilledReceiptPanel" class="mt-4 pt-4 border-top border-success border-opacity-25" style="display: none;">
+                                    <div class="d-flex align-items-center justify-content-between mb-4">
+                                        <h5 class="fw-bold text-success mb-0">
+                                            <i class="bi bi-patch-check-fill me-2"></i>Blood Request Successfully Fulfilled
+                                        </h5>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold">
+                                            <i class="bi bi-qr-code me-1"></i>Digital Receipt
                                         </span>
                                     </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
-                                        <label class="text-muted small fw-bold text-uppercase d-block mb-1">Next
-                                            Step</label>
-                                        <p class="mb-0 small fw-medium">
-                                            <?php
-                                            if ($status === 'fulfilled')
-                                                echo "Request fulfilled successfully.";
-                                            elseif ($status === 'pending')
-                                                echo "Awaiting hospital/blood bank response...";
-                                            elseif ($status === 'accepted')
-                                                echo "Contacting hospital for transport.";
-                                            elseif ($status === 'rejected')
-                                                echo "Request rejected. Submit a new one.";
-                                            else
-                                                echo "Searching for another match...";
-                                            ?>
-                                        </p>
-                                        <a href="report.php?type=<?php echo htmlspecialchars($matchedDetails['match_type'] ?? ''); ?>"
-                                            class="btn btn-sm btn-outline-primary rounded-pill mt-2 px-3">
-                                            <i class="bi bi-file-earmark-text me-1"></i>View Report
-                                        </a>
+
+                                    <div class="row align-items-center g-4">
+                                        <!-- QR Code Container -->
+                                        <div class="col-md-5 col-lg-4 text-center">
+                                            <div class="p-3 bg-white border border-success border-opacity-25 rounded-4 shadow-sm d-inline-block qr-container-wrapper">
+                                                <div id="receiptQrCode" class="d-flex justify-content-center align-items-center p-2 mb-2"></div>
+                                                <span class="badge bg-light text-dark border fw-bold px-3 py-1">
+                                                    Request ID: Req #<?php echo htmlspecialchars($reqId); ?>
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Receipt Details & Buttons -->
+                                        <div class="col-md-7 col-lg-8">
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Patient Name</small>
+                                                        <span class="fw-bold text-dark fs-6"><?php echo htmlspecialchars($userProfile['name'] ?? 'Guest'); ?></span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Blood Group & Units</small>
+                                                        <span class="badge bg-danger fs-6 px-3 py-1 me-1"><?php echo htmlspecialchars($matchedDetails['blood_group'] ?? 'N/A'); ?></span>
+                                                        <span class="fw-bold text-dark small"><?php echo htmlspecialchars($matchedDetails['units_needed'] ?? 1); ?> unit(s)</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Fulfillment Blood Bank</small>
+                                                        <span class="fw-bold text-dark small"><?php echo htmlspecialchars($matchedDetails['bank_name'] ?: 'Network Blood Bank'); ?></span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Verification Security</small>
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small">
+                                                            <i class="bi bi-shield-lock-fill me-1"></i>HMAC Signed URL
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <button type="button" onclick="downloadReceiptQR()" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                                                    <i class="bi bi-download me-2"></i>Download QR
+                                                </button>
+                                                <a href="verify_receipt.php?request_id=<?php echo $reqId; ?>&token=<?php echo $secToken; ?>" target="_blank" class="btn btn-outline-success rounded-pill px-4 fw-bold">
+                                                    <i class="bi bi-printer me-2"></i>Print Receipt / Verification
+                                                </a>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        <?php else: ?>
+                            <div class="card-custom mb-4"
+                                style="background: linear-gradient(135deg, <?php echo $matchedDetails['status'] === 'fulfilled' ? '#f0fff4' : '#fff5f5'; ?> 0%, #ffffff 100%); border: 1px solid <?php echo $matchedDetails['status'] === 'fulfilled' ? '#22c55e22' : '#ff084422'; ?>;">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div
+                                        class="<?php echo $matchedDetails['status'] === 'fulfilled' ? 'bg-success' : 'bg-danger'; ?> bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i
+                                            class="bi <?php echo $matchedDetails['status'] === 'fulfilled' ? 'bi-check-all text-success' : 'bi-heart-pulse-fill text-danger'; ?> fs-3"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="fw-bold text-dark mb-0">
+                                            <?php
+                                            if ($matchedDetails['status'] === 'fulfilled')
+                                                echo 'Request Fulfilled!';
+                                            elseif ($matchedDetails['match_type'] === 'blood_bank')
+                                                echo 'Blood Request Pending';
+                                            elseif ($matchedDetails['match_type'] === 'hospital')
+                                                echo 'Organ Request Submitted';
+                                            else
+                                                echo 'Matched Donor for You!';
+                                            ?>
+                                        </h4>
+                                        <p class="text-muted mb-0 small text-uppercase fw-bold tracking-wider">
+                                            <?php
+                                            if ($matchedDetails['match_type'] === 'blood_bank')
+                                                echo 'Blood Bank Processing';
+                                            elseif ($matchedDetails['match_type'] === 'hospital')
+                                                echo 'Hospital Organ Request';
+                                            else
+                                                echo 'Automated System Match';
+                                            ?>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
+                                            <?php if (($matchedDetails['match_type'] ?? '') === 'hospital'): ?>
+                                                <label class="text-muted small fw-bold text-uppercase d-block mb-1">Organ
+                                                    Type</label>
+                                                <span class="badge bg-primary fs-5 px-3 rounded-pill"><i
+                                                        class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($matchedDetails['organ_type'] ?? 'N/A'); ?></span>
+                                            <?php else: ?>
+                                                <label class="text-muted small fw-bold text-uppercase d-block mb-1">Blood
+                                                    Group</label>
+                                                <span
+                                                    class="badge bg-danger fs-5 px-3 rounded-pill"><?php echo htmlspecialchars($matchedDetails['blood_group'] ?? 'N/A'); ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
+                                            <label class="text-muted small fw-bold text-uppercase d-block mb-1">Status</label>
+                                            <?php
+                                            $status = $matchedDetails['status'];
+                                            $color = ($status === 'fulfilled' || $status === 'accepted') ? 'success' : (($status === 'pending') ? 'warning' : 'danger');
+                                            $icon = ($status === 'fulfilled') ? 'check-all' : (($status === 'accepted') ? 'check-circle' : (($status === 'pending') ? 'hourglass-split' : 'x-circle'));
+                                            ?>
+                                            <span class="badge bg-<?php echo $color; ?> fs-6 px-3 rounded-pill text-uppercase">
+                                                <i class="bi bi-<?php echo $icon; ?> me-1"></i>
+                                                <?php echo $status === 'fulfilled' ? 'Request Fulfilled' : htmlspecialchars($status); ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
+                                            <label class="text-muted small fw-bold text-uppercase d-block mb-1">Next
+                                                Step</label>
+                                            <p class="mb-0 small fw-medium">
+                                                <?php
+                                                if ($status === 'fulfilled')
+                                                    echo "Request fulfilled successfully.";
+                                                elseif ($status === 'pending')
+                                                    echo "Awaiting hospital/blood bank response...";
+                                                elseif ($status === 'accepted')
+                                                    echo "Contacting hospital for transport.";
+                                                elseif ($status === 'rejected')
+                                                    echo "Request rejected. Submit a new one.";
+                                                else
+                                                    echo "Searching for another match...";
+                                                ?>
+                                            </p>
+                                            <a href="report.php?type=<?php echo htmlspecialchars($matchedDetails['match_type'] ?? ''); ?>"
+                                                class="btn btn-sm btn-outline-primary rounded-pill mt-2 px-3">
+                                                <i class="bi bi-file-earmark-text me-1"></i>View Report
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
 
                     <!-- ── ORGAN FULFILLMENT CARD (Step 2) ────────────────── -->
                     <?php if (!empty($organDetails)): ?>
-                        <?php
-                        $oStatus = strtolower($organDetails['status']);
-                        $oGradFrom = $oStatus === 'fulfilled' ? '#f0fff4' : ($oStatus === 'rejected' ? '#fff1f2' : '#f0f8ff');
-                        $oBorder = $oStatus === 'fulfilled' ? '#22c55e22' : ($oStatus === 'rejected' ? '#ff0a2222' : '#0083b022');
-                        $oIconClass = $oStatus === 'fulfilled' ? 'bi-check-all text-success' : ($oStatus === 'rejected' ? 'bi-x-circle-fill text-danger' : 'bi-hourglass-split text-info');
-                        $oBgClass = $oStatus === 'fulfilled' ? 'bg-success' : ($oStatus === 'rejected' ? 'bg-danger' : 'bg-info');
-                        $oBadgeClass = $oStatus === 'fulfilled' ? 'bg-success' : ($oStatus === 'rejected' ? 'bg-danger' : 'bg-warning text-dark');
-                        $oTitle = $oStatus === 'fulfilled' ? 'Organ Request Fulfilled!' : ($oStatus === 'rejected' ? 'Organ Request Rejected' : 'Organ Request Pending');
-                        $oNextStep = $oStatus === 'fulfilled' ? 'Units allocated. Contact hospital.' : ($oStatus === 'rejected' ? 'Request rejected. Submit a new one.' : 'Awaiting hospital approval...');
-                        ?>
-                        <div class="card-custom mb-4"
-                            style="background:linear-gradient(135deg,<?php echo $oGradFrom; ?> 0%,#ffffff 100%);border:1px solid <?php echo $oBorder; ?>;">
-                            <div class="d-flex align-items-center mb-3">
-                                <div class="<?php echo $oBgClass; ?> bg-opacity-10 rounded-circle p-3 me-3">
-                                    <i class="bi <?php echo $oIconClass; ?> fs-3"></i>
+                        <?php if (strtolower($organDetails['status']) === 'fulfilled'): ?>
+                            <?php
+                            $oReqId = (int)($organDetails['request_id'] ?? 0);
+                            $oSecToken = hash_hmac('sha256', 'organ_receipt_' . $oReqId, 'MediMatch_Secure_Receipt_Key_2026');
+                            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+                            $host = $_SERVER['HTTP_HOST'];
+                            $scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['PHP_SELF'])), '/');
+                            $oVerifyUrl = "$protocol://$host$scriptDir/verify_receipt.php?type=organ&request_id=$oReqId&token=$oSecToken";
+                            ?>
+                            <div class="card-custom mb-4 border-2 border-success shadow-sm" style="background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);">
+                                <!-- Collapsed Header & Summary Row -->
+                                <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-success bg-opacity-10 text-success rounded-circle p-3 me-3 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px; flex-shrink: 0;">
+                                            <i class="bi bi-patch-check-fill fs-2"></i>
+                                        </div>
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <h4 class="fw-bold text-success mb-0">Organ Request Fulfilled</h4>
+                                                <span class="badge bg-success rounded-pill px-3 py-1 text-uppercase">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Fulfilled
+                                                </span>
+                                            </div>
+                                            <div class="text-muted small">
+                                                <span><strong>Patient:</strong> <?php echo htmlspecialchars($userProfile['name'] ?? 'Guest'); ?></span>
+                                                <span class="mx-2">·</span>
+                                                <span><strong>Organ:</strong> <span class="badge bg-primary rounded-pill px-3 py-1"><i class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($organDetails['organ_type'] ?? 'N/A'); ?></span></span>
+                                                <span class="mx-2">·</span>
+                                                <span><strong>Hospital:</strong> <?php echo htmlspecialchars($organDetails['hospital_name'] ?? 'Network Hospital'); ?></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ms-md-auto">
+                                        <button type="button" id="toggleOrganReceiptBtn" onclick="toggleOrganReceiptPanel()" class="btn btn-success rounded-pill px-4 py-2 fw-bold shadow-sm">
+                                            <i class="bi bi-receipt me-2"></i>View Receipt <i class="bi bi-chevron-down ms-1" id="organReceiptChevron"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 class="fw-bold text-dark mb-0"><?php echo $oTitle; ?></h4>
-                                    <p class="text-muted mb-0 small text-uppercase fw-bold">Hospital Organ Processing</p>
-                                </div>
-                            </div>
 
-                            <div class="row g-3">
-                                <!-- Organ Type -->
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
-                                        <label class="text-muted small fw-bold text-uppercase d-block mb-2">Organ</label>
-                                        <span class="badge bg-primary fs-5 px-3 rounded-pill">
-                                            <i
-                                                class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($organDetails['organ_type']); ?>
+                                <!-- Expandable Organ Receipt Panel -->
+                                <div id="fulfilledOrganReceiptPanel" class="mt-4 pt-4 border-top border-success border-opacity-25" style="display: none;">
+                                    <div class="d-flex align-items-center justify-content-between mb-4">
+                                        <h5 class="fw-bold text-success mb-0">
+                                            <i class="bi bi-patch-check-fill me-2"></i>Organ Request Successfully Fulfilled
+                                        </h5>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold">
+                                            <i class="bi bi-qr-code me-1"></i>Digital Receipt
                                         </span>
                                     </div>
-                                </div>
-                                <!-- Status -->
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
-                                        <label class="text-muted small fw-bold text-uppercase d-block mb-2">Status</label>
-                                        <span
-                                            class="badge <?php echo $oBadgeClass; ?> fs-6 px-3 rounded-pill text-uppercase">
-                                            <i class="bi <?php echo $oIconClass; ?> me-1"></i>
-                                            <?php echo $oStatus === 'fulfilled' ? 'Fulfilled' : ucfirst($oStatus); ?>
-                                        </span>
-                                    </div>
-                                </div>
-                                <!-- Next Step + Report -->
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
-                                        <label class="text-muted small fw-bold text-uppercase d-block mb-2">Next
-                                            Step</label>
-                                        <p class="mb-2 small fw-medium"><?php echo $oNextStep; ?></p>
-                                        <a href="report.php?type=hospital"
-                                            class="btn btn-sm btn-outline-primary rounded-pill px-3">
-                                            <i class="bi bi-file-earmark-text me-1"></i>View Report
-                                        </a>
+
+                                    <div class="row align-items-center g-4">
+                                        <!-- QR Code Container -->
+                                        <div class="col-md-5 col-lg-4 text-center">
+                                            <div class="p-3 bg-white border border-success border-opacity-25 rounded-4 shadow-sm d-inline-block qr-container-wrapper">
+                                                <div id="organReceiptQrCode" class="d-flex justify-content-center align-items-center p-2 mb-2"></div>
+                                                <span class="badge bg-light text-dark border fw-bold px-3 py-1">
+                                                    Request ID: Req #<?php echo htmlspecialchars($oReqId); ?>
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Receipt Details & Buttons -->
+                                        <div class="col-md-7 col-lg-8">
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Patient Name</small>
+                                                        <span class="fw-bold text-dark fs-6"><?php echo htmlspecialchars($userProfile['name'] ?? 'Guest'); ?></span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Organ Type</small>
+                                                        <span class="badge bg-primary fs-6 px-3 py-1"><i class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($organDetails['organ_type'] ?? 'N/A'); ?></span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Fulfillment Hospital</small>
+                                                        <span class="fw-bold text-dark small"><?php echo htmlspecialchars($organDetails['hospital_name'] ?? 'Network Hospital'); ?></span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <div class="p-3 bg-white rounded-3 border">
+                                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Hospital Location</small>
+                                                        <span class="fw-bold text-dark small"><i class="bi bi-geo-alt me-1 text-primary"></i><?php echo htmlspecialchars($organDetails['location'] ?? 'Network Facility'); ?></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <button type="button" onclick="downloadOrganReceiptQR()" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                                                    <i class="bi bi-download me-2"></i>Download QR
+                                                </button>
+                                                <a href="verify_receipt.php?type=organ&request_id=<?php echo $oReqId; ?>&token=<?php echo $oSecToken; ?>" target="_blank" class="btn btn-outline-success rounded-pill px-4 fw-bold">
+                                                    <i class="bi bi-printer me-2"></i>Print Receipt / Verification
+                                                </a>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-
-                            <!-- Hospital details strip (only when fulfilled) -->
-                            <?php if ($oStatus === 'fulfilled'): ?>
-                                <div class="mt-3 pt-3 border-top d-flex flex-wrap gap-3">
-                                    <span class="text-muted small"><i
-                                            class="bi bi-hospital me-1 text-primary"></i><strong><?php echo htmlspecialchars($organDetails['hospital_name']); ?></strong></span>
-                                    <span class="text-muted small"><i
-                                            class="bi bi-geo-alt me-1 text-info"></i><?php echo htmlspecialchars($organDetails['location']); ?></span>
-                                    <span class="text-muted small"><i
-                                            class="bi bi-telephone me-1 text-success"></i><?php echo htmlspecialchars($organDetails['contact']); ?></span>
+                        <?php else: ?>
+                            <?php
+                            $oStatus = strtolower($organDetails['status']);
+                            $oGradFrom = $oStatus === 'rejected' ? '#fff1f2' : '#f0f8ff';
+                            $oBorder = $oStatus === 'rejected' ? '#ff0a2222' : '#0083b022';
+                            $oIconClass = $oStatus === 'rejected' ? 'bi-x-circle-fill text-danger' : 'bi-hourglass-split text-info';
+                            $oBgClass = $oStatus === 'rejected' ? 'bg-danger' : 'bg-info';
+                            $oBadgeClass = $oStatus === 'rejected' ? 'bg-danger' : 'bg-warning text-dark';
+                            $oTitle = $oStatus === 'rejected' ? 'Organ Request Rejected' : 'Organ Request Pending';
+                            $oNextStep = $oStatus === 'rejected' ? 'Request rejected. Submit a new one.' : 'Awaiting hospital approval...';
+                            ?>
+                            <div class="card-custom mb-4"
+                                style="background:linear-gradient(135deg,<?php echo $oGradFrom; ?> 0%,#ffffff 100%);border:1px solid <?php echo $oBorder; ?>;">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="<?php echo $oBgClass; ?> bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi <?php echo $oIconClass; ?> fs-3"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="fw-bold text-dark mb-0"><?php echo $oTitle; ?></h4>
+                                        <p class="text-muted mb-0 small text-uppercase fw-bold">Hospital Organ Processing</p>
+                                    </div>
                                 </div>
-                            <?php endif; ?>
-                        </div>
+
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
+                                            <label class="text-muted small fw-bold text-uppercase d-block mb-2">Organ</label>
+                                            <span class="badge bg-primary fs-5 px-3 rounded-pill">
+                                                <i class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($organDetails['organ_type']); ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
+                                            <label class="text-muted small fw-bold text-uppercase d-block mb-2">Status</label>
+                                            <span class="badge <?php echo $oBadgeClass; ?> fs-6 px-3 rounded-pill text-uppercase">
+                                                <i class="bi <?php echo $oIconClass; ?> me-1"></i>
+                                                <?php echo ucfirst($oStatus); ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 bg-white rounded-4 border shadow-sm text-center">
+                                            <label class="text-muted small fw-bold text-uppercase d-block mb-2">Next Step</label>
+                                            <p class="mb-2 small fw-medium"><?php echo $oNextStep; ?></p>
+                                            <a href="report.php?type=hospital" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                                <i class="bi bi-file-earmark-text me-1"></i>View Report
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
 
 
@@ -1086,8 +1281,9 @@ try {
         </div>
     </div>
 
-    <!-- Bootstrap JS & Data Display Logic -->
+    <!-- Bootstrap JS, QRCode.js & Data Display Logic -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         .hover-lift {
             transition: box-shadow 0.25s, transform 0.25s;
@@ -1112,6 +1308,33 @@ try {
                 opacity: 1;
                 transform: translateY(0);
             }
+        }
+
+        @keyframes qrScaleFade {
+            0% {
+                opacity: 0;
+                transform: scale(0.7) translateY(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .qr-container-wrapper {
+            animation: qrScaleFade 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        #fulfilledReceiptPanel, #fulfilledOrganReceiptPanel {
+            display: none;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        #fulfilledReceiptPanel.panel-expanded, #fulfilledOrganReceiptPanel.panel-expanded {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         /* Blood Group Filter Button Styling & Animations */
@@ -1525,9 +1748,122 @@ try {
                 .replace(/'/g, '&#039;');
         }
 
+        const qrVerificationUrl = <?php echo json_encode($verifyUrl ?? ''); ?>;
+        const organQrVerificationUrl = <?php echo json_encode($oVerifyUrl ?? ''); ?>;
+
+        function toggleReceiptPanel() {
+            const panel = document.getElementById('fulfilledReceiptPanel');
+            const btn = document.getElementById('toggleReceiptBtn');
+            if (!panel || !btn) return;
+
+            const isHidden = panel.style.display === 'none' || panel.style.display === '';
+
+            if (isHidden) {
+                panel.style.display = 'block';
+                setTimeout(() => {
+                    panel.classList.add('panel-expanded');
+                }, 10);
+                btn.innerHTML = '<i class="bi bi-receipt me-2"></i>Hide Receipt <i class="bi bi-chevron-up ms-1"></i>';
+                btn.classList.replace('btn-success', 'btn-outline-success');
+            } else {
+                panel.classList.remove('panel-expanded');
+                setTimeout(() => {
+                    panel.style.display = 'none';
+                }, 300);
+                btn.innerHTML = '<i class="bi bi-receipt me-2"></i>View Receipt <i class="bi bi-chevron-down ms-1"></i>';
+                btn.classList.replace('btn-outline-success', 'btn-success');
+            }
+        }
+
+        function toggleOrganReceiptPanel() {
+            const panel = document.getElementById('fulfilledOrganReceiptPanel');
+            const btn = document.getElementById('toggleOrganReceiptBtn');
+            if (!panel || !btn) return;
+
+            const isHidden = panel.style.display === 'none' || panel.style.display === '';
+
+            if (isHidden) {
+                panel.style.display = 'block';
+                setTimeout(() => {
+                    panel.classList.add('panel-expanded');
+                }, 10);
+                btn.innerHTML = '<i class="bi bi-receipt me-2"></i>Hide Receipt <i class="bi bi-chevron-up ms-1"></i>';
+                btn.classList.replace('btn-success', 'btn-outline-success');
+            } else {
+                panel.classList.remove('panel-expanded');
+                setTimeout(() => {
+                    panel.style.display = 'none';
+                }, 300);
+                btn.innerHTML = '<i class="bi bi-receipt me-2"></i>View Receipt <i class="bi bi-chevron-down ms-1"></i>';
+                btn.classList.replace('btn-outline-success', 'btn-success');
+            }
+        }
+
+        function downloadReceiptQR() {
+            const qrImg = document.querySelector("#receiptQrCode img");
+            const qrCanvas = document.querySelector("#receiptQrCode canvas");
+            let imageUri = "";
+            if (qrImg && qrImg.src) {
+                imageUri = qrImg.src;
+            } else if (qrCanvas) {
+                imageUri = qrCanvas.toDataURL("image/png");
+            }
+            
+            if (imageUri) {
+                const link = document.createElement("a");
+                link.href = imageUri;
+                link.download = "blood_receipt_<?php echo $reqId ?? 'qr'; ?>.png";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
+        function downloadOrganReceiptQR() {
+            const qrImg = document.querySelector("#organReceiptQrCode img");
+            const qrCanvas = document.querySelector("#organReceiptQrCode canvas");
+            let imageUri = "";
+            if (qrImg && qrImg.src) {
+                imageUri = qrImg.src;
+            } else if (qrCanvas) {
+                imageUri = qrCanvas.toDataURL("image/png");
+            }
+            
+            if (imageUri) {
+                const link = document.createElement("a");
+                link.href = imageUri;
+                link.download = "organ_receipt_<?php echo $oReqId ?? 'qr'; ?>.png";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             renderBloodAvailability(currentSelectedBloodGroup);
             renderOrganAvailability(currentSelectedOrganType);
+
+            if (qrVerificationUrl && document.getElementById('receiptQrCode')) {
+                new QRCode(document.getElementById("receiptQrCode"), {
+                    text: qrVerificationUrl,
+                    width: 160,
+                    height: 160,
+                    colorDark: "#15803d",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
+
+            if (organQrVerificationUrl && document.getElementById('organReceiptQrCode')) {
+                new QRCode(document.getElementById("organReceiptQrCode"), {
+                    text: organQrVerificationUrl,
+                    width: 160,
+                    height: 160,
+                    colorDark: "#15803d",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
         });
     </script>
 </body>
