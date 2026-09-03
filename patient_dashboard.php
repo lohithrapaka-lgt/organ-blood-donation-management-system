@@ -184,7 +184,6 @@ try {
                           oi.organ_type, oi.units_available, oi.hospital_id AS hid
                    FROM organ_inventory oi
                    JOIN hospitals h ON oi.hospital_id = h.hospital_id
-                   WHERE oi.units_available > 0
                    ORDER BY h.hospital_id, oi.organ_type";
     $organAvailability = $pdo->query($organQuery)->fetchAll(PDO::FETCH_ASSOC);
 
@@ -935,149 +934,90 @@ try {
                 <!-- BLOOD SECTION -->
                 <div id="blood-section" class="content-section">
                     <div class="card-custom">
-                        <h5 class="fw-bold text-dark mb-1"><i class="bi bi-droplet-fill text-danger me-2"></i>Blood Bank
-                            Network</h5>
-                        <p class="text-muted small mb-4">Click a bank card to view available blood groups and units.</p>
-
-                        <?php if (empty($groupedBanks)): ?>
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-droplet fs-1 d-block mb-2 opacity-25"></i>No blood inventory active across
-                                network facilities.
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 pb-3 border-bottom">
+                            <div>
+                                <h5 class="fw-bold text-dark mb-1">
+                                    <i class="bi bi-droplet-fill text-danger me-2"></i>Blood Bank Network
+                                </h5>
+                                <p class="text-muted small mb-0">Select a blood group to view real-time facility availability across network blood banks.</p>
                             </div>
-                        <?php endif; ?>
+                        </div>
 
-                        <?php $bidx = 0;
-                        foreach ($groupedBanks as $bid => $bank):
-                            $bidx++; ?>
-                            <div class="mb-3 border rounded-4 overflow-hidden shadow-sm hover-lift">
-                                <!-- Bank Header (clickable toggle) -->
-                                <div class="p-3 d-flex justify-content-between align-items-center"
-                                    style="cursor:pointer; background:#fff; transition:background 0.2s;"
-                                    onclick="toggleCard('bcard-<?php echo $bid; ?>', this)"
-                                    onmouseover="this.style.background='#fff8f8'" onmouseout="this.style.background='#fff'">
-                                    <div class="d-flex align-items-center">
-                                        <div class="bg-danger bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3"
-                                            style="width:44px;height:44px;flex-shrink:0">
-                                            <i class="bi bi-droplet-fill text-danger fs-5"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="fw-bold mb-0 text-dark">
-                                                <?php echo htmlspecialchars($bank['name']); ?>
-                                            </h6>
-                                            <small class="text-muted"><i
-                                                    class="bi bi-geo-alt me-1"></i><?php echo htmlspecialchars($bank['location']); ?>
-                                                <?php if (!empty($bank['contact'])): ?>&nbsp;·&nbsp;<i
-                                                        class="bi bi-telephone me-1"></i><?php echo htmlspecialchars($bank['contact']); ?><?php endif; ?></small>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge bg-danger rounded-pill"><?php echo count($bank['bloods']); ?>
-                                            types</span>
-                                        <i class="bi bi-chevron-down text-muted toggle-icon"
-                                            style="transition:transform 0.3s;"></i>
-                                    </div>
-                                </div>
-                                <!-- Blood group detail panel -->
-                                <div id="bcard-<?php echo $bid; ?>" class="card-expand"
-                                    style="display:none; background:#fafafa; border-top:1px solid #f0e6e6; padding:1rem 1.25rem;">
-                                    <div class="row g-2">
-                                        <?php foreach ($bank['bloods'] as $b):
-                                            $uc = $b['units'] === 0 ? 'text-danger' : ($b['units'] < 5 ? 'text-warning' : 'text-success');
-                                            ?>
-                                            <div class="col-6 col-md-3">
-                                                <div class="p-2 bg-white border rounded-3 text-center shadow-sm">
-                                                    <span
-                                                        class="badge bg-danger rounded-pill px-3 mb-1"><?php echo htmlspecialchars($b['group']); ?></span>
-                                                    <div class="fw-bold <?php echo $uc; ?>"><?php echo $b['units']; ?> <small
-                                                            class="text-muted fw-normal">units</small></div>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
+                        <!-- Blood Group Filter Container -->
+                        <div class="p-3 bg-light rounded-4 border mb-4">
+                            <label class="form-label text-uppercase fw-bold text-muted small d-block mb-2">
+                                <i class="bi bi-funnel-fill text-danger me-1"></i> Filter By Blood Group
+                            </label>
+                            <div class="d-flex flex-wrap gap-2 align-items-center" id="bloodGroupFilterContainer">
+                                <?php
+                                $allGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+                                $defaultGroup = !empty($userProfile['blood_group']) ? $userProfile['blood_group'] : 'A+';
+                                foreach ($allGroups as $group):
+                                    $isActive = ($group === $defaultGroup);
+                                ?>
+                                    <button type="button" 
+                                            class="btn blood-group-btn <?php echo $isActive ? 'active' : ''; ?>" 
+                                            data-group="<?php echo htmlspecialchars($group); ?>"
+                                            onclick="selectBloodGroup('<?php echo htmlspecialchars($group); ?>')">
+                                        <i class="bi bi-droplet-fill me-1"></i><?php echo htmlspecialchars($group); ?>
+                                    </button>
+                                <?php endforeach; ?>
                             </div>
-                        <?php endforeach; ?>
+                        </div>
+
+                        <!-- Availability Results -->
+                        <div id="bloodAvailabilityResults" class="blood-results-container">
+                            <!-- Dynamically populated via JS -->
+                        </div>
                     </div>
                 </div>
 
                 <!-- ORGAN SECTION -->
                 <div id="organ-section" class="content-section">
                     <div class="card-custom">
-                        <h5 class="fw-bold text-dark mb-1"><i
-                                class="bi bi-heart-pulse-fill text-danger me-2"></i>Hospital Organ Network</h5>
-                        <p class="text-muted small mb-4">Click a hospital card to view available organs and submit a
-                            request.</p>
-
-                        <?php if (empty($groupedHospitals)): ?>
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-heart-pulse fs-1 d-block mb-2 opacity-25"></i>No organ inventory available
-                                across network hospitals.
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 pb-3 border-bottom">
+                            <div>
+                                <h5 class="fw-bold text-dark mb-1">
+                                    <i class="bi bi-heart-pulse-fill text-primary me-2"></i>Hospital Organ Network
+                                </h5>
+                                <p class="text-muted small mb-0">Select an organ type to view real-time facility availability and submit requests.</p>
                             </div>
-                        <?php endif; ?>
+                        </div>
 
-                        <?php foreach ($groupedHospitals as $hid => $hosp): ?>
-                            <div class="mb-3 border rounded-4 overflow-hidden shadow-sm hover-lift">
-                                <!-- Hospital Header (clickable toggle) -->
-                                <div class="p-3 d-flex justify-content-between align-items-center"
-                                    style="cursor:pointer; background:#fff; transition:background 0.2s;"
-                                    onclick="toggleCard('hcard-<?php echo $hid; ?>', this)"
-                                    onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='#fff'">
-                                    <div class="d-flex align-items-center">
-                                        <div class="bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3"
-                                            style="width:44px;height:44px;flex-shrink:0">
-                                            <i class="bi bi-hospital text-primary fs-5"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="fw-bold mb-0 text-dark">
-                                                <?php echo htmlspecialchars($hosp['name']); ?>
-                                            </h6>
-                                            <small class="text-muted"><i
-                                                    class="bi bi-geo-alt me-1"></i><?php echo htmlspecialchars($hosp['location']); ?>
-                                                <?php if (!empty($hosp['contact'])): ?>&nbsp;·&nbsp;<i
-                                                        class="bi bi-telephone me-1"></i><?php echo htmlspecialchars($hosp['contact']); ?><?php endif; ?></small>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge bg-primary rounded-pill"><?php echo count($hosp['organs']); ?>
-                                            organ<?php echo count($hosp['organs']) > 1 ? 's' : ''; ?></span>
-                                        <i class="bi bi-chevron-down text-muted toggle-icon"
-                                            style="transition:transform 0.3s;"></i>
-                                    </div>
-                                </div>
-                                <!-- Organ detail panel -->
-                                <div id="hcard-<?php echo $hid; ?>" class="card-expand"
-                                    style="display:none; background:#f8fbff; border-top:1px solid #e0eeff; padding:1rem 1.25rem;">
-                                    <div class="row g-2">
-                                        <?php foreach ($hosp['organs'] as $o):
-                                            $uc = $o['units'] === 0 ? 'text-danger' : ($o['units'] < 3 ? 'text-warning' : 'text-success');
-                                            ?>
-                                            <div class="col-12 col-md-6">
-                                                <div
-                                                    class="p-2 bg-white border rounded-3 d-flex align-items-center justify-content-between shadow-sm">
-                                                    <span class="badge bg-primary rounded-pill px-3 py-2"><i
-                                                            class="bi bi-heart-pulse me-1"></i><?php echo htmlspecialchars($o['type']); ?></span>
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <span class="fw-bold <?php echo $uc; ?>"><?php echo $o['units']; ?>
-                                                            <small class="text-muted fw-normal">units</small></span>
-                                                        <form method="POST" class="m-0"
-                                                            onsubmit="return confirm('Request <?php echo addslashes($o['type']); ?> from <?php echo addslashes($hosp['name']); ?>?')">
-                                                            <input type="hidden" name="hospital_id"
-                                                                value="<?php echo (int) $o['hid']; ?>">
-                                                            <input type="hidden" name="organ_type"
-                                                                value="<?php echo htmlspecialchars($o['type']); ?>">
-                                                            <button type="submit" name="request_organ"
-                                                                class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
-                                                                <i class="bi bi-send me-1"></i>Request
-                                                            </button>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
+                        <!-- Organ Type Filter Container -->
+                        <div class="p-3 bg-light rounded-4 border mb-4">
+                            <label class="form-label text-uppercase fw-bold text-muted small d-block mb-2">
+                                <i class="bi bi-funnel-fill text-primary me-1"></i> Filter By Organ Type
+                            </label>
+                            <div class="d-flex flex-wrap gap-2 align-items-center" id="organTypeFilterContainer">
+                                <?php
+                                $organButtons = [
+                                    ['label' => 'All Organs', 'icon' => 'bi-grid-fill', 'type' => 'all'],
+                                    ['label' => 'Heart', 'icon' => 'bi-heart-fill text-danger', 'type' => 'Heart'],
+                                    ['label' => 'Kidney', 'icon' => 'bi-capsule text-warning', 'type' => 'Kidney'],
+                                    ['label' => 'Liver', 'icon' => 'bi-activity text-danger', 'type' => 'Liver'],
+                                    ['label' => 'Lungs', 'icon' => 'bi-wind text-info', 'type' => 'Lungs'],
+                                    ['label' => 'Pancreas', 'icon' => 'bi-shield-fill-plus text-primary', 'type' => 'Pancreas'],
+                                    ['label' => 'Cornea', 'icon' => 'bi-eye-fill text-info', 'type' => 'Cornea'],
+                                    ['label' => 'Bone Marrow', 'icon' => 'bi-bandaid-fill text-danger', 'type' => 'Bone Marrow']
+                                ];
+                                foreach ($organButtons as $btn):
+                                    $isActive = ($btn['type'] === 'all');
+                                ?>
+                                    <button type="button" 
+                                            class="btn organ-type-btn <?php echo $isActive ? 'active' : ''; ?>" 
+                                            data-organ="<?php echo htmlspecialchars($btn['type']); ?>"
+                                            onclick="selectOrganType('<?php echo htmlspecialchars($btn['type']); ?>')">
+                                        <i class="bi <?php echo $btn['icon']; ?> me-1"></i><?php echo htmlspecialchars($btn['label']); ?>
+                                    </button>
+                                <?php endforeach; ?>
                             </div>
-                        <?php endforeach; ?>
+                        </div>
+
+                        <!-- Availability Results -->
+                        <div id="organAvailabilityResults" class="organ-results-container">
+                            <!-- Dynamically populated via JS -->
+                        </div>
                     </div>
 
                     <!-- My Organ Requests Status -->
@@ -1173,6 +1113,117 @@ try {
                 transform: translateY(0);
             }
         }
+
+        /* Blood Group Filter Button Styling & Animations */
+        .blood-group-btn {
+            background: #ffffff;
+            color: #495057;
+            border: 1px solid #dee2e6;
+            border-radius: 50px;
+            padding: 0.45rem 1.15rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .blood-group-btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            border-color: #ff0844;
+            color: #ff0844;
+            box-shadow: 0 6px 16px rgba(255, 8, 68, 0.18);
+        }
+
+        .blood-group-btn.active {
+            background: linear-gradient(135deg, #ff0844 0%, #ff4e50 100%);
+            color: #ffffff;
+            border-color: transparent;
+            box-shadow: 0 8px 20px rgba(255, 8, 68, 0.35);
+            transform: translateY(-2px) scale(1.04);
+        }
+
+        .blood-group-btn.active:hover {
+            transform: translateY(-4px) scale(1.07);
+            box-shadow: 0 10px 24px rgba(255, 8, 68, 0.45);
+        }
+
+        .blood-group-btn i {
+            transition: transform 0.25s ease;
+        }
+
+        .blood-group-btn:hover i {
+            transform: scale(1.2);
+        }
+
+        /* Results Transition Animation */
+        .blood-results-container {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .blood-results-container.fade-out {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        /* Organ Type Filter Button Styling & Animations */
+        .organ-type-btn {
+            background: #ffffff;
+            color: #495057;
+            border: 1px solid #dee2e6;
+            border-radius: 50px;
+            padding: 0.45rem 1.15rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .organ-type-btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            border-color: #0d6efd;
+            color: #0d6efd;
+            box-shadow: 0 6px 16px rgba(13, 110, 253, 0.18);
+        }
+
+        .organ-type-btn.active {
+            background: linear-gradient(135deg, #0d6efd 0%, #00d2ff 100%);
+            color: #ffffff;
+            border-color: transparent;
+            box-shadow: 0 8px 20px rgba(13, 110, 253, 0.35);
+            transform: translateY(-2px) scale(1.04);
+        }
+
+        .organ-type-btn.active:hover {
+            transform: translateY(-4px) scale(1.07);
+            box-shadow: 0 10px 24px rgba(13, 110, 253, 0.45);
+        }
+
+        .organ-type-btn i {
+            transition: transform 0.25s ease;
+        }
+
+        .organ-type-btn:hover i {
+            transform: scale(1.2);
+        }
+
+        .organ-results-container {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .organ-results-container.fade-out {
+            opacity: 0;
+            transform: translateY(10px);
+        }
     </style>
     <script>
         // UI Section Toggling Logic
@@ -1199,8 +1250,6 @@ try {
             panel.style.display = isOpen ? 'none' : 'block';
             if (icon) icon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
         }
-
-
     </script>
     <script>
         function toggleRequestFields() {
@@ -1227,6 +1276,259 @@ try {
                 document.getElementById('hospitalSelect').required = true;
             }
         }
+    </script>
+    <script>
+        const bloodInventoryData = <?php echo json_encode($bloodAvailability, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+        let currentSelectedBloodGroup = <?php echo json_encode(!empty($userProfile['blood_group']) ? $userProfile['blood_group'] : 'A+'); ?>;
+
+        function selectBloodGroup(group) {
+            currentSelectedBloodGroup = group;
+            
+            document.querySelectorAll('.blood-group-btn').forEach(btn => {
+                if (btn.getAttribute('data-group') === group) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            const container = document.getElementById('bloodAvailabilityResults');
+            if (!container) return;
+
+            container.classList.add('fade-out');
+
+            setTimeout(() => {
+                renderBloodAvailability(group);
+                container.classList.remove('fade-out');
+            }, 200);
+        }
+
+        function renderBloodAvailability(group) {
+            const container = document.getElementById('bloodAvailabilityResults');
+            if (!container) return;
+
+            const matchingRows = bloodInventoryData.filter(item => item.blood_group === group);
+
+            if (matchingRows.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5 bg-white border rounded-4 shadow-sm p-4">
+                        <i class="bi bi-droplet-half fs-1 text-danger opacity-50 d-block mb-3"></i>
+                        <h5 class="fw-bold text-dark mb-2">No blood currently available</h5>
+                        <p class="text-muted mb-0">There are currently no blood bank facilities with <strong>${escapeHtml(group)}</strong> inventory recorded.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const totalUnits = matchingRows.reduce((sum, row) => sum + parseInt(row.units_available || 0, 10), 0);
+
+            let html = '';
+
+            if (totalUnits === 0) {
+                html += `
+                    <div class="alert alert-warning border-0 rounded-4 d-flex align-items-center mb-3 shadow-sm">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-3 fs-4"></i>
+                        <div>
+                            <strong class="d-block text-dark">No blood currently available</strong>
+                            <span class="small text-muted">All registered facilities for blood group <strong>${escapeHtml(group)}</strong> are currently out of stock.</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '<div class="row g-3">';
+            matchingRows.forEach(row => {
+                const units = parseInt(row.units_available || 0, 10);
+                let unitsBadgeHtml = '';
+
+                if (units > 1) {
+                    unitsBadgeHtml = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-check-circle-fill me-1"></i>${units} units available</span>`;
+                } else if (units === 1) {
+                    unitsBadgeHtml = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-check-circle-fill me-1"></i>1 unit available</span>`;
+                } else {
+                    unitsBadgeHtml = `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-x-circle-fill me-1"></i>Out of Stock (0 units available)</span>`;
+                }
+
+                const contactHtml = row.contact ? `&nbsp;·&nbsp;<i class="bi bi-telephone-fill text-secondary me-1"></i>${escapeHtml(row.contact)}` : '';
+
+                html += `
+                    <div class="col-12">
+                        <div class="card-custom hover-lift p-3 border rounded-4 bg-white shadow-sm d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                            <div class="d-flex align-items-center">
+                                <div class="bg-danger bg-opacity-10 text-danger rounded-circle p-3 me-3 d-flex align-items-center justify-content-center" style="width: 50px; height: 50px; flex-shrink: 0;">
+                                    <i class="bi bi-building fs-4"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1">${escapeHtml(row.name)}</h6>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-geo-alt-fill text-primary me-1"></i>${escapeHtml(row.location)}
+                                        ${contactHtml}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3 ms-sm-auto flex-wrap">
+                                <span class="badge bg-danger rounded-pill px-3 py-2 fs-6 shadow-sm">
+                                    <i class="bi bi-droplet-fill me-1"></i>${escapeHtml(row.blood_group)}
+                                </span>
+                                <div>
+                                    ${unitsBadgeHtml}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            container.innerHTML = html;
+        }
+
+        const organInventoryData = <?php echo json_encode($organAvailability, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+        let currentSelectedOrganType = 'all';
+
+        function selectOrganType(organType) {
+            currentSelectedOrganType = organType;
+            
+            document.querySelectorAll('.organ-type-btn').forEach(btn => {
+                if (btn.getAttribute('data-organ') === organType) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            const container = document.getElementById('organAvailabilityResults');
+            if (!container) return;
+
+            container.classList.add('fade-out');
+
+            setTimeout(() => {
+                renderOrganAvailability(organType);
+                container.classList.remove('fade-out');
+            }, 200);
+        }
+
+        function renderOrganAvailability(organType) {
+            const container = document.getElementById('organAvailabilityResults');
+            if (!container) return;
+
+            let matchingRows = organInventoryData;
+            if (organType !== 'all') {
+                matchingRows = organInventoryData.filter(item => 
+                    item.organ_type.toLowerCase() === organType.toLowerCase()
+                );
+            }
+
+            if (matchingRows.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5 bg-white border rounded-4 shadow-sm p-4">
+                        <i class="bi bi-heart-pulse fs-1 text-primary opacity-50 d-block mb-3"></i>
+                        <h5 class="fw-bold text-dark mb-2">No organ currently available</h5>
+                        <p class="text-muted mb-0">There are currently no hospital facilities with <strong>${escapeHtml(organType === 'all' ? 'Organ' : organType)}</strong> inventory recorded.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const totalUnits = matchingRows.reduce((sum, row) => sum + parseInt(row.units_available || 0, 10), 0);
+
+            let html = '';
+
+            if (totalUnits === 0 && organType !== 'all') {
+                html += `
+                    <div class="alert alert-warning border-0 rounded-4 d-flex align-items-center mb-3 shadow-sm">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-3 fs-4"></i>
+                        <div>
+                            <strong class="d-block text-dark">No organ currently available</strong>
+                            <span class="small text-muted">All registered hospitals for <strong>${escapeHtml(organType)}</strong> are currently out of stock.</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '<div class="row g-3">';
+            matchingRows.forEach(row => {
+                const units = parseInt(row.units_available || 0, 10);
+                let unitsBadgeHtml = '';
+                let requestBtnHtml = '';
+
+                if (units > 1) {
+                    unitsBadgeHtml = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-check-circle-fill me-1"></i>${units} units available</span>`;
+                } else if (units === 1) {
+                    unitsBadgeHtml = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-check-circle-fill me-1"></i>1 unit available</span>`;
+                } else {
+                    unitsBadgeHtml = `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-x-circle-fill me-1"></i>Out of Stock (0 units available)</span>`;
+                }
+
+                if (units > 0) {
+                    requestBtnHtml = `
+                        <form method="POST" action="patient_dashboard.php" class="m-0" onsubmit="return confirm('Request ${escapeHtml(row.organ_type)} from ${escapeHtml(row.hospital_name)}?')">
+                            <input type="hidden" name="hospital_id" value="${parseInt(row.hid, 10)}">
+                            <input type="hidden" name="organ_type" value="${escapeHtml(row.organ_type)}">
+                            <button type="submit" name="request_organ" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                                <i class="bi bi-send me-1"></i>Request
+                            </button>
+                        </form>
+                    `;
+                } else {
+                    requestBtnHtml = `
+                        <button class="btn btn-secondary btn-sm rounded-pill px-3 fw-bold" disabled>
+                            <i class="bi bi-slash-circle me-1"></i>Unavailable
+                        </button>
+                    `;
+                }
+
+                const contactHtml = row.contact ? `&nbsp;·&nbsp;<i class="bi bi-telephone-fill text-secondary me-1"></i>${escapeHtml(row.contact)}` : '';
+
+                html += `
+                    <div class="col-12">
+                        <div class="card-custom hover-lift p-3 border rounded-4 bg-white shadow-sm d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                            <div class="d-flex align-items-center">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-3 me-3 d-flex align-items-center justify-content-center" style="width: 50px; height: 50px; flex-shrink: 0;">
+                                    <i class="bi bi-hospital fs-4"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1">${escapeHtml(row.hospital_name)}</h6>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-geo-alt-fill text-primary me-1"></i>${escapeHtml(row.location)}
+                                        ${contactHtml}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3 ms-sm-auto flex-wrap">
+                                <span class="badge bg-primary rounded-pill px-3 py-2 fs-6 shadow-sm">
+                                    <i class="bi bi-heart-pulse me-1"></i>${escapeHtml(row.organ_type)}
+                                </span>
+                                <div>
+                                    ${unitsBadgeHtml}
+                                </div>
+                                <div>
+                                    ${requestBtnHtml}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderBloodAvailability(currentSelectedBloodGroup);
+            renderOrganAvailability(currentSelectedOrganType);
+        });
     </script>
 </body>
 
