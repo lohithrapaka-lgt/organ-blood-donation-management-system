@@ -88,6 +88,85 @@ try {
         exit();
     }
 
+    // ── Handle Create Organ Request for Patient ─────────────────────────────
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_patient_organ_request'])) {
+        $patient_id = isset($_POST['patient_id']) ? (int) $_POST['patient_id'] : 0;
+        $organ_type = isset($_POST['organ_type']) ? trim($_POST['organ_type']) : '';
+        $condition = isset($_POST['condition']) ? trim($_POST['condition']) : 'normal';
+
+        if ($patient_id <= 0) {
+            $_SESSION['error'] = "<div class='alert alert-danger d-flex align-items-center'><i class='bi bi-x-circle-fill me-2'></i>Please select a valid registered patient.</div>";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit();
+        }
+
+        $validOrgans = ['Kidney', 'Liver', 'Heart', 'Lungs', 'Pancreas', 'Cornea', 'Bone Marrow'];
+        if (!in_array($organ_type, $validOrgans, true)) {
+            $_SESSION['error'] = "<div class='alert alert-danger d-flex align-items-center'><i class='bi bi-x-circle-fill me-2'></i>Please select a valid organ type from the list.</div>";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit();
+        }
+
+        $validConditions = ['normal', 'urgent', 'critical'];
+        if (!in_array($condition, $validConditions, true)) {
+            $condition = 'normal';
+        }
+
+        // 1. Verify patient exists in database
+        $stmtCheckPat = $pdo->prepare("SELECT patient_id, name, age, blood_group FROM patients WHERE patient_id = ?");
+        $stmtCheckPat->execute([$patient_id]);
+        $patData = $stmtCheckPat->fetch(PDO::FETCH_ASSOC);
+
+        if (!$patData) {
+            $_SESSION['error'] = "<div class='alert alert-danger d-flex align-items-center'><i class='bi bi-x-circle-fill me-2'></i>Patient record not found. Cannot create organ request for non-existent patient.</div>";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit();
+        }
+
+        // 2. Prevent accidental duplicate active organ request for same patient & organ
+        $stmtCheckDup = $pdo->prepare("SELECT request_id, status FROM organ_requests WHERE patient_id = ? AND organ_type = ? AND status IN ('pending', 'approved')");
+        $stmtCheckDup->execute([$patient_id, $organ_type]);
+        $existingReq = $stmtCheckDup->fetch(PDO::FETCH_ASSOC);
+
+        if ($existingReq) {
+            $_SESSION['error'] = "<div class='alert alert-warning d-flex align-items-center'><i class='bi bi-exclamation-triangle-fill me-2'></i>An active organ request (#" . $existingReq['request_id'] . ") for <strong>" . htmlspecialchars($organ_type) . "</strong> already exists for patient <strong>" . htmlspecialchars($patData['name']) . "</strong> with status: <strong>" . strtoupper($existingReq['status']) . "</strong>. Duplicate active requests are prevented.</div>";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit();
+        }
+
+        // 3. Calculate priority score using existing system formula
+        $request_date = date('Y-m-d H:i:s');
+        $priority_score = calculatePriority((int)$patData['age'], $condition, 'organ', $organ_type, $request_date);
+
+        // 4. Insert organ request & update patient record
+        $pdo->beginTransaction();
+        try {
+            $stmtInsert = $pdo->prepare("
+                INSERT INTO organ_requests (patient_id, hospital_id, organ_type, status, priority_score, request_date)
+                VALUES (?, ?, ?, 'pending', ?, ?)
+            ");
+            $stmtInsert->execute([$patient_id, $hospital_id, $organ_type, $priority_score, $request_date]);
+            $newReqId = (int)$pdo->lastInsertId();
+
+            $stmtUpdatePat = $pdo->prepare("
+                UPDATE patients 
+                SET request_type = 'organ', organ_needed = ?, `condition` = ?, priority_score = ?, request_date = ?, status = 'pending' 
+                WHERE patient_id = ?
+            ");
+            $stmtUpdatePat->execute([$organ_type, $condition, $priority_score, $request_date, $patient_id]);
+
+            $pdo->commit();
+
+            $_SESSION['success'] = "<div class='alert alert-success d-flex align-items-center'><i class='bi bi-check-circle-fill me-2'></i>Organ request <strong>#{$newReqId}</strong> for patient <strong>" . htmlspecialchars($patData['name']) . "</strong> (" . htmlspecialchars($organ_type) . ", Priority Score: <strong>{$priority_score}</strong>) registered successfully under your hospital queue!</div>";
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $_SESSION['error'] = "<div class='alert alert-danger'>Error creating organ request: " . htmlspecialchars($e->getMessage()) . "</div>";
+        }
+
+        header("Location: " . $_SERVER['PHP_SELF']);
+        exit();
+    }
+
     // ── Handle Accept / Reject Organ Request (Step 5) ────────────────────────
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_organ_request'])) {
         $request_id = (int) $_POST['request_id'];
@@ -179,6 +258,14 @@ try {
     ");
     $stmtPending->execute([$hospital_id]);
     $pendingOrganRequests = $stmtPending->fetchAll(PDO::FETCH_ASSOC);
+
+    // Fetch all registered patients for hospital search/select
+    $stmtAllPatients = $pdo->query("
+        SELECT patient_id, name, age, blood_group, contact, location, `condition`, status
+        FROM patients
+        ORDER BY name ASC
+    ");
+    $registeredPatients = $stmtAllPatients->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
     die("Database Error: " . htmlspecialchars($e->getMessage()));
@@ -364,6 +451,9 @@ try {
                 <div class="nav-link-custom" onclick="showSection('update-stock-section', this)">
                     <i class="bi bi-plus-circle-fill me-3 fs-5"></i> Update Stock
                 </div>
+                <div class="nav-link-custom" onclick="showSection('create-request-section', this)">
+                    <i class="bi bi-person-plus-fill me-3 fs-5 text-primary"></i> Create Organ Request
+                </div>
                 <div class="nav-link-custom" onclick="showSection('requests-section', this)">
                     <i class="bi bi-clipboard-check-fill me-3 fs-5 text-info"></i> Requests
                     <?php if (count($pendingOrganRequests) > 0): ?>
@@ -458,6 +548,26 @@ try {
                                 <h6 class="text-uppercase text-muted fw-bold mb-2 small">Rejected</h6>
                                 <h2 class="fw-bold text-danger mb-0"><?php echo $stats['rejected']; ?></h2>
                                 <i class="bi bi-x-circle-fill stat-icon text-danger"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Action Banner for Hospital-Initiated Organ Request -->
+                    <div class="card-custom p-4 mb-4 bg-white border border-primary border-opacity-25 rounded-4 shadow-sm">
+                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                            <div class="d-flex align-items-center">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-3 me-3 d-flex align-items-center justify-content-center" style="width:55px;height:55px;flex-shrink:0;">
+                                    <i class="bi bi-person-plus-fill fs-3"></i>
+                                </div>
+                                <div>
+                                    <h5 class="fw-bold text-dark mb-1">Evaluate &amp; Create Organ Request for Patient</h5>
+                                    <p class="text-muted small mb-0">Hospitals initiate verified organ transplant requirements following patient clinical consultation. Automatically assigns priority score.</p>
+                                </div>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-primary rounded-pill px-4 py-2 fw-bold text-nowrap shadow-sm" onclick="showSection('create-request-section', document.querySelectorAll('.nav-link-custom')[3])">
+                                    <i class="bi bi-plus-circle-fill me-2"></i>Create Request for Patient
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -600,6 +710,119 @@ try {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ══ CREATE ORGAN REQUEST FOR PATIENT SECTION ══════════════════ -->
+                <div id="create-request-section" class="content-section d-none-soft">
+                    <div class="card-custom">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h5 class="fw-bold m-0 text-dark"><i class="bi bi-person-plus-fill text-primary me-2"></i>Create Organ Request for Patient</h5>
+                                <p class="text-muted small mb-0 mt-1">Create a verified organ transplant request after clinical evaluation of the patient.</p>
+                            </div>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill px-3 py-2 fw-bold">Hospital Verified</span>
+                        </div>
+
+                        <div class="alert alert-primary border-0 rounded-4 d-flex align-items-center my-4 shadow-sm">
+                            <i class="bi bi-shield-fill-check me-3 fs-4 text-primary"></i>
+                            <div>
+                                <strong class="d-block">Medical Protocol Notice</strong>
+                                <span class="small text-muted">Only authorized hospital staff should initiate organ requests. This action creates a verified, high-priority entry in the MediMatch system. The priority score is automatically calculated.</span>
+                            </div>
+                        </div>
+
+                        <form action="hospital_dashboard.php" method="POST" id="createOrganRequestForm">
+                            <div class="row g-4">
+
+                                <!-- Patient Selection -->
+                                <div class="col-md-12">
+                                    <label class="form-label fw-bold text-muted small">Patient <span class="text-danger">*</span></label>
+                                    <select name="patient_id" id="patientSelect" class="form-select form-select-lg" required onchange="showPatientDetails(this.value)">
+                                        <option value="" disabled selected>— Select a registered patient —</option>
+                                        <?php foreach ($registeredPatients as $rp): ?>
+                                            <option value="<?php echo (int)$rp['patient_id']; ?>"
+                                                data-name="<?php echo htmlspecialchars($rp['name'], ENT_QUOTES); ?>"
+                                                data-age="<?php echo (int)$rp['age']; ?>"
+                                                data-blood="<?php echo htmlspecialchars($rp['blood_group'], ENT_QUOTES); ?>"
+                                                data-condition="<?php echo htmlspecialchars($rp['condition'] ?? 'N/A', ENT_QUOTES); ?>"
+                                                data-status="<?php echo htmlspecialchars($rp['status'] ?? 'N/A', ENT_QUOTES); ?>"
+                                                data-contact="<?php echo htmlspecialchars($rp['contact'] ?? '', ENT_QUOTES); ?>"
+                                                data-location="<?php echo htmlspecialchars($rp['location'] ?? '', ENT_QUOTES); ?>">
+                                                <?php echo htmlspecialchars($rp['name']); ?> — Patient #<?php echo (int)$rp['patient_id']; ?> — <?php echo htmlspecialchars($rp['blood_group']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Search and select the patient for whom this organ requirement is being created.</div>
+                                </div>
+
+                                <!-- Patient Info Card (shown dynamically) -->
+                                <div class="col-md-12" id="patientInfoCard" style="display:none;">
+                                    <div class="p-4 bg-light border border-primary border-opacity-25 rounded-4 shadow-sm">
+                                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge-fill me-2"></i>Selected Patient Details</h6>
+                                        <div class="row g-3">
+                                            <div class="col-6 col-md-3">
+                                                <div class="text-muted small fw-bold text-uppercase">Name</div>
+                                                <div class="fw-bold text-dark" id="piName">—</div>
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <div class="text-muted small fw-bold text-uppercase">Age</div>
+                                                <div class="fw-bold text-dark" id="piAge">—</div>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <div class="text-muted small fw-bold text-uppercase">Blood Group</div>
+                                                <div id="piBlood">—</div>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <div class="text-muted small fw-bold text-uppercase">Condition</div>
+                                                <div id="piCondition">—</div>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <div class="text-muted small fw-bold text-uppercase">Status</div>
+                                                <div id="piStatus">—</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Organ Required -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-muted small">Organ Required <span class="text-danger">*</span></label>
+                                    <select name="organ_type" class="form-select form-select-lg" required>
+                                        <option value="" disabled selected>— Select organ type —</option>
+                                        <option value="Kidney">Kidney</option>
+                                        <option value="Liver">Liver</option>
+                                        <option value="Heart">Heart</option>
+                                        <option value="Lungs">Lungs</option>
+                                        <option value="Pancreas">Pancreas</option>
+                                        <option value="Cornea">Cornea</option>
+                                        <option value="Bone Marrow">Bone Marrow</option>
+                                    </select>
+                                </div>
+
+                                <!-- Clinical Condition / Priority -->
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-muted small">Clinical Condition / Priority <span class="text-danger">*</span></label>
+                                    <select name="condition" class="form-select form-select-lg" required>
+                                        <option value="" disabled selected>— Select condition —</option>
+                                        <option value="normal">Normal</option>
+                                        <option value="urgent">Urgent</option>
+                                        <option value="critical">Critical</option>
+                                    </select>
+                                    <div class="form-text"><i class="bi bi-info-circle me-1 text-primary"></i>Priority score is automatically calculated based on clinical condition, patient age, waiting time and organ type.</div>
+                                </div>
+
+                                <!-- Submit -->
+                                <div class="col-12 mt-2">
+                                    <button type="submit" name="create_patient_organ_request"
+                                        class="btn btn-primary rounded-pill px-5 py-2 shadow-sm fw-bold fs-6">
+                                        <i class="bi bi-plus-circle-fill me-2"></i>Create Organ Request
+                                    </button>
+                                    <span class="text-muted small ms-3"><i class="bi bi-lock-fill me-1"></i>Request will be logged with your hospital ID and submitted to MediMatch priority queue.</span>
+                                </div>
+
+                            </div>
+                        </form>
                     </div>
                 </div>
 
@@ -778,10 +1001,58 @@ try {
                 'dashboard-section': 'Dashboard Overview',
                 'inventory-section': 'Organ Inventory',
                 'update-stock-section': 'Update Stock',
+                'create-request-section': 'Create Organ Request',
                 'requests-section': 'Patient Organ Requests',
                 'profile-section': 'Hospital Profile'
             };
             document.getElementById('headerTitle').innerText = titles[sectionId] || 'Dashboard Overview';
+        }
+
+        function showPatientDetails(patientId) {
+            const card = document.getElementById('patientInfoCard');
+            if (!patientId) {
+                card.style.display = 'none';
+                return;
+            }
+
+            // Find the selected option
+            const select = document.getElementById('patientSelect');
+            const selectedOption = select.options[select.selectedIndex];
+
+            if (!selectedOption || !selectedOption.value) {
+                card.style.display = 'none';
+                return;
+            }
+
+            const name      = selectedOption.getAttribute('data-name') || '—';
+            const age       = selectedOption.getAttribute('data-age') || '—';
+            const blood     = selectedOption.getAttribute('data-blood') || '—';
+            const condition = selectedOption.getAttribute('data-condition') || '—';
+            const status    = selectedOption.getAttribute('data-status') || '—';
+
+            document.getElementById('piName').textContent = name;
+            document.getElementById('piAge').textContent = age + ' years';
+
+            const condMap = { critical: 'danger', urgent: 'warning', normal: 'success' };
+            const condColor = condMap[condition.toLowerCase()] || 'secondary';
+            document.getElementById('piBlood').innerHTML = `<span class="badge bg-danger rounded-pill px-3">${escapeHtmlH(blood)}</span>`;
+            document.getElementById('piCondition').innerHTML = `<span class="badge bg-${condColor} rounded-pill px-3">${escapeHtmlH(condition)}</span>`;
+
+            const stMap = { pending: 'warning', approved: 'primary', fulfilled: 'success', waiting_for_donor: 'info', donor_matched: 'info', rejected: 'danger' };
+            const stColor = stMap[status.toLowerCase()] || 'secondary';
+            document.getElementById('piStatus').innerHTML = `<span class="badge bg-${stColor} rounded-pill px-3">${escapeHtmlH(status)}</span>`;
+
+            card.style.display = 'block';
+        }
+
+        function escapeHtmlH(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
     </script>
 </body>

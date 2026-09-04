@@ -36,16 +36,23 @@ try {
         unset($_SESSION['error']);
     }
 
-    // Handle Unified Form Submission
+    // Handle Unified Form Submission (Blood Requests Only)
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_request'])) {
         $name = $_POST['name'];
         $age = (int) $_POST['age'];
         $blood_group = $_POST['blood_group'];
         $condition = $_POST['condition'];
-        $request_type = $_POST['request_type']; // 'blood' or 'organ'
+        $request_type = $_POST['request_type'] ?? 'blood';
         $patient_id = $_SESSION['ref_id'];
         
         $request_date = date('Y-m-d H:i:s');
+
+        // Patients are not permitted to independently initiate organ requests
+        if ($request_type === 'organ') {
+            $_SESSION['error'] = "<div class='alert alert-warning alert-dismissible fade show' role='alert'><i class='bi bi-info-circle-fill me-2'></i>Direct organ requests by patients are disabled. Organ transplant requirements must be initiated by an authorized hospital following clinical evaluation.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit();
+        }
 
         $pdo->beginTransaction();
         try {
@@ -72,23 +79,6 @@ try {
                 } else {
                     $message = "<div class='alert alert-success alert-dismissible fade show' role='alert'><i class='bi bi-check-circle-fill me-2'></i>Blood Request successfully logged for matching! Sufficient stock available in network. <button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
                 }
-                $_SESSION['success'] = $message;
-                header("Location: " . $_SERVER['PHP_SELF']);
-                exit();
-            } elseif ($request_type === 'organ') {
-                $organ_type = trim($_POST['organ_type']);
-                $req_hospital_id = ($_POST['hospital_id'] === 'all') ? null : (int) $_POST['hospital_id'];
-                $priority_score = calculatePriority($age, $condition, 'organ', $organ_type, $request_date);
-
-                $stmtOrg = $pdo->prepare("INSERT INTO organ_requests (patient_id, hospital_id, organ_type, status, priority_score) VALUES (?, ?, ?, 'pending', ?)");
-                $stmtOrg->execute([$patient_id, $req_hospital_id, $organ_type, $priority_score]);
-
-                // Update patients table with latest request info and priority
-                $stmtPat = $pdo->prepare("UPDATE patients SET request_type='organ', organ_needed=?, `condition`=?, request_date=?, status='pending', priority_score=? WHERE patient_id=?");
-                $stmtPat->execute([$organ_type, $condition, $request_date, $priority_score, $patient_id]);
-
-                $pdo->commit();
-                $message = "<div class='alert alert-success alert-dismissible fade show' role='alert'><i class='bi bi-check-circle-fill me-2'></i>Organ Request successfully submitted to hospital queue!<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
                 $_SESSION['success'] = $message;
                 header("Location: " . $_SERVER['PHP_SELF']);
                 exit();
@@ -129,33 +119,9 @@ try {
         exit();
     }
 
-    // Note: The previous Handle Organ Request block is deprecated since we unified the form.
-    // However, we preserve functionality if the legacy hospital network buttons are still active.
+    // Direct organ request from patient is disabled per medical protocol
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_organ'])) {
-        $patient_id = $_SESSION['ref_id'];
-        $req_hospital_id = ($_POST['hospital_id'] === 'all') ? null : (int) $_POST['hospital_id'];
-        $organ_type = trim($_POST['organ_type']);
-
-        $stmtAge = $pdo->prepare("SELECT age FROM patients WHERE patient_id = ?");
-        $stmtAge->execute([$patient_id]);
-        $age = (int) $stmtAge->fetchColumn();
-
-        $condition = 'critical';
-        $request_date = date('Y-m-d H:i:s');
-        $priority_score = calculatePriority($age, $condition, 'organ', $organ_type, $request_date);
-
-        $pdo->beginTransaction();
-        try {
-            $stmtOrg = $pdo->prepare("INSERT INTO organ_requests (patient_id, hospital_id, organ_type, status, priority_score) VALUES (?, ?, ?, 'pending', ?)");
-            $stmtOrg->execute([$patient_id, $req_hospital_id, $organ_type, $priority_score]);
-            $stmtPat = $pdo->prepare("UPDATE patients SET request_type='organ', organ_needed=? WHERE patient_id=?");
-            $stmtPat->execute([$organ_type, $patient_id]);
-            $pdo->commit();
-            $_SESSION['success'] = "<div class='alert alert-success alert-dismissible fade show' role='alert'><i class='bi bi-check-circle-fill me-2'></i>Organ request submitted via direct hospital catalog!<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            $_SESSION['error'] = "<div class='alert alert-danger alert-dismissible fade show' role='alert'><i class='bi bi-x-circle-fill me-2'></i>Error: " . htmlspecialchars($e->getMessage()) . "<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
-        }
+        $_SESSION['error'] = "<div class='alert alert-warning alert-dismissible fade show' role='alert'><i class='bi bi-info-circle-fill me-2'></i>Direct organ requests by patients are disabled. Organ transplant requirements must be initiated by an authorized hospital following clinical evaluation.<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
         header("Location: " . $_SERVER['PHP_SELF']);
         exit();
     }
@@ -420,7 +386,7 @@ try {
                     <i class="bi bi-person-fill me-3 fs-5"></i> My Profile
                 </div>
                 <div class="nav-link-custom" onclick="showSection('request-section', this)">
-                    <i class="bi bi-bandaid-fill me-3 fs-5"></i> Submit Request
+                    <i class="bi bi-droplet-half me-3 fs-5"></i> Submit Blood Request
                 </div>
                 <div class="nav-link-custom" onclick="showSection('blood-section', this)">
                     <i class="bi bi-droplet-fill me-3 fs-5"></i> Blood Details
@@ -1053,33 +1019,62 @@ try {
                     </div>
                 </div>
 
-                <!-- REQUEST SECTION -->
+                <!-- REQUEST SECTION (Blood Requests Only) -->
                 <div id="request-section" class="content-section">
                     <div class="card-custom">
-                        <h5 class="fw-bold mb-4 text-dark"><i
-                                class="bi bi-file-earmark-medical text-danger me-2"></i>Initiate System Match Request
-                        </h5>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0 text-dark"><i
+                                    class="bi bi-droplet-half text-danger me-2"></i>Initiate Blood Request
+                            </h5>
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-3 py-2 fw-bold">Blood Network</span>
+                        </div>
+                        <p class="text-muted small mb-4 border-bottom pb-3">Submit a blood requirement to match with inventory across regional blood banks and emergency donor networks.</p>
+
+                        <!-- Informational notice for Organ Transplants -->
+                        <div class="alert alert-info border-0 rounded-4 d-flex align-items-center mb-4 shadow-sm">
+                            <i class="bi bi-hospital-fill text-primary me-3 fs-3"></i>
+                            <div>
+                                <strong class="d-block text-dark">Looking for an Organ Transplant?</strong>
+                                <span class="small text-muted">Per medical protocol, organ transplant requirements must be initiated and verified by an authorized hospital medical team following clinical evaluation. Once your hospital submits an organ request on your behalf, you can track its live progress under <strong>Organ Details</strong>.</span>
+                            </div>
+                        </div>
+
                         <form action="patient_dashboard.php" method="POST">
+                            <input type="hidden" name="request_type" value="blood">
                             <div class="row g-4">
-                                <div class="col-md-12">
+                                <div class="col-md-6">
                                     <label class="form-label fw-bold text-muted small">Patient Name (For Request)</label>
-                                    <input type="text" name="name" class="form-control form-control-lg" required placeholder="e.g. John Doe">
+                                    <input type="text" name="name" class="form-control form-control-lg" required 
+                                        value="<?php echo htmlspecialchars($userProfile['name'] ?? ''); ?>"
+                                        placeholder="e.g. John Doe">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-muted small">Age</label>
+                                    <input type="number" name="age" class="form-control form-control-lg" required min="1" max="120"
+                                        value="<?php echo htmlspecialchars($userProfile['age'] ?? ''); ?>">
                                 </div>
 
                                 <div class="col-md-4">
-                                    <label class="form-label fw-bold text-muted small">Request Type</label>
-                                    <select name="request_type" id="requestTypeSelect" class="form-select form-select-lg" onchange="toggleRequestFields()" required>
-                                        <option value="" disabled selected>Select Type...</option>
-                                        <option value="blood">Blood Request</option>
-                                        <option value="organ">Organ Request</option>
+                                    <label class="form-label fw-bold text-muted small">Blood Group</label>
+                                    <select name="blood_group" id="bgSelect" class="form-select form-select-lg" required>
+                                        <option value="" disabled <?php echo empty($userProfile['blood_group']) ? 'selected' : ''; ?>>Select Group...</option>
+                                        <?php
+                                        $allGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+                                        $patBg = $userProfile['blood_group'] ?? '';
+                                        foreach ($allGroups as $g):
+                                        ?>
+                                            <option value="<?php echo $g; ?>" <?php echo ($patBg === $g) ? 'selected' : ''; ?>><?php echo $g; ?></option>
+                                        <?php endforeach; ?>
                                     </select>
                                 </div>
+
                                 <div class="col-md-4">
-                                    <label class="form-label fw-bold text-muted small">Age</label>
-                                    <input type="number" name="age" class="form-control form-control-lg" required min="1" max="120">
+                                    <label class="form-label fw-bold text-muted small">Units Needed</label>
+                                    <input type="number" name="units_needed" id="unitsInput" class="form-control form-control-lg" min="1" max="10" value="1" required placeholder="e.g. 1">
                                 </div>
+
                                 <div class="col-md-4">
-                                    <label class="form-label fw-bold text-muted small">Request Severity</label>
+                                    <label class="form-label fw-bold text-muted small">Medical Urgency</label>
                                     <select name="condition" class="form-select form-select-lg" required>
                                         <option value="normal">Normal / Routine</option>
                                         <option value="urgent">Urgent</option>
@@ -1087,60 +1082,9 @@ try {
                                     </select>
                                 </div>
 
-                                <!-- BLOOD FIELDS (Hidden by default) -->
-                                <div id="bloodFields" class="row g-4 m-0 p-0" style="display:none;">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold text-muted small">Blood Group</label>
-                                        <select name="blood_group" id="bgSelect" class="form-select form-select-lg">
-                                            <option value="" disabled selected>Select Group...</option>
-                                            <option value="A+">A+</option>
-                                            <option value="A-">A-</option>
-                                            <option value="B+">B+</option>
-                                            <option value="B-">B-</option>
-                                            <option value="AB+">AB+</option>
-                                            <option value="AB-">AB-</option>
-                                            <option value="O+">O+</option>
-                                            <option value="O-">O-</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold text-muted small">Units Needed</label>
-                                        <input type="number" name="units_needed" id="unitsInput" class="form-control form-control-lg" min="1" max="10" placeholder="e.g. 2">
-                                    </div>
-                                </div>
-
-                                <!-- ORGAN FIELDS (Hidden by default) -->
-                                <div id="organFields" class="row g-4 m-0 p-0" style="display:none;">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold text-muted small">Organ Type Needed</label>
-                                        <select name="organ_type" id="organSelect" class="form-select form-select-lg">
-                                            <option value="" disabled selected>Select Organ...</option>
-                                            <option value="Heart">Heart</option>
-                                            <option value="Liver">Liver</option>
-                                            <option value="Lungs">Lungs</option>
-                                            <option value="Kidney">Kidney</option>
-                                            <option value="Pancreas">Pancreas</option>
-                                            <option value="Cornea">Cornea</option>
-                                            <option value="Bone Marrow">Bone Marrow</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold text-muted small">Target Hospital</label>
-                                        <select name="hospital_id" id="hospitalSelect" class="form-select form-select-lg">
-                                            <option value="" disabled selected>Select Nearest Hospital...</option>
-                                            <?php /* Added All Hospitals option */ ?>
-<option value="all">All Hospitals</option>
-<?php foreach ($hospitalDropdownList as $h): ?>
-    <option value="<?php echo $h['hospital_id']; ?>"><?php echo htmlspecialchars($h['name']); ?> (<?php echo htmlspecialchars($h['location']); ?>)</option>
-<?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                </div>
-
                                 <div class="col-12 mt-4">
                                     <button type="submit" name="submit_request"
-                                        class="btn btn-request rounded-pill px-5 shadow-sm fw-bold">Run Matching
-                                        Sequence <i class="bi bi-send ms-2"></i></button>
+                                        class="btn btn-request rounded-pill px-5 shadow-sm fw-bold">Submit Blood Request <i class="bi bi-send ms-2"></i></button>
                                 </div>
                             </div>
                         </form>
@@ -1479,7 +1423,7 @@ try {
             const titles = {
                 'dashboard-section': 'Overview Dashboard',
                 'profile-section': 'Manage Profile',
-                'request-section': 'Secure Request Submission',
+                'request-section': 'Submit Blood Request',
                 'blood-section': 'Blood Bank Network',
                 'organ-section': 'Hospital Organ Network'
             };
@@ -1497,28 +1441,7 @@ try {
     </script>
     <script>
         function toggleRequestFields() {
-            const type = document.getElementById('requestTypeSelect').value;
-            const bloodFields = document.getElementById('bloodFields');
-            const organFields = document.getElementById('organFields');
-            
-            if (type === 'blood') {
-                bloodFields.style.display = 'flex';
-                organFields.style.display = 'none';
-                
-                document.getElementById('bgSelect').required = true;
-                document.getElementById('unitsInput').required = true;
-                document.getElementById('organSelect').required = false;
-                document.getElementById('hospitalSelect').required = false;
-                
-            } else if (type === 'organ') {
-                bloodFields.style.display = 'none';
-                organFields.style.display = 'flex';
-                
-                document.getElementById('bgSelect').required = false;
-                document.getElementById('unitsInput').required = false;
-                document.getElementById('organSelect').required = true;
-                document.getElementById('hospitalSelect').required = true;
-            }
+            // Deprecated: Patient requests are now dedicated to blood requests
         }
     </script>
     <script>
@@ -1704,23 +1627,11 @@ try {
                     unitsBadgeHtml = `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-3 py-2 rounded-pill fw-bold fs-6"><i class="bi bi-x-circle-fill me-1"></i>Out of Stock (0 units available)</span>`;
                 }
 
-                if (units > 0) {
-                    requestBtnHtml = `
-                        <form method="POST" action="patient_dashboard.php" class="m-0" onsubmit="return confirm('Request ${escapeHtml(row.organ_type)} from ${escapeHtml(row.hospital_name)}?')">
-                            <input type="hidden" name="hospital_id" value="${parseInt(row.hid, 10)}">
-                            <input type="hidden" name="organ_type" value="${escapeHtml(row.organ_type)}">
-                            <button type="submit" name="request_organ" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm">
-                                <i class="bi bi-send me-1"></i>Request
-                            </button>
-                        </form>
-                    `;
-                } else {
-                    requestBtnHtml = `
-                        <button class="btn btn-secondary btn-sm rounded-pill px-3 fw-bold" disabled>
-                            <i class="bi bi-slash-circle me-1"></i>Unavailable
-                        </button>
-                    `;
-                }
+                requestBtnHtml = `
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-3 py-2 rounded-pill fw-bold" title="Organ requests must be initiated by an authorized hospital">
+                        <i class="bi bi-hospital me-1"></i>Hospital Ordered Only
+                    </span>
+                `;
 
                 const contactHtml = row.contact ? `&nbsp;·&nbsp;<i class="bi bi-telephone-fill text-secondary me-1"></i>${escapeHtml(row.contact)}` : '';
 
