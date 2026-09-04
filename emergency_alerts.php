@@ -95,6 +95,9 @@ function ensureBloodModuleSchema(PDO $pdo) {
         try {
             $pdo->exec("ALTER TABLE donor_responses MODIFY COLUMN patient_id INT NULL");
         } catch (Exception $e) {}
+        try {
+            $pdo->exec("ALTER TABLE donor_responses DROP INDEX unique_donor_patient");
+        } catch (Exception $e) {}
 
         $schemaChecked = true;
     } catch (Exception $e) {
@@ -208,8 +211,18 @@ function detectAndTriggerEmergencyAlerts(PDO $pdo, $specificRequestId = null) {
                     ? $req['bank_name'] . (!empty($req['bank_location']) ? ' (' . $req['bank_location'] . ')' : '')
                     : 'City Central Blood Bank & Partner Centers';
 
-                // Find matching verified available donors
-                $stmtDonors->execute([$bg]);
+                // Find matching verified available donors with compatible blood group
+                $compatGroups = getCompatibleDonorBloodGroups($bg);
+                $inSql = implode(',', array_fill(0, count($compatGroups), '?'));
+                $stmtDonors = $pdo->prepare("
+                    SELECT donor_id, name, blood_group, contact, location
+                    FROM donors
+                    WHERE blood_group IN ($inSql)
+                      AND availability = 'available'
+                      AND verified = 'yes'
+                      AND donor_type IN ('blood', 'both')
+                ");
+                $stmtDonors->execute($compatGroups);
                 $matchingDonors = $stmtDonors->fetchAll(PDO::FETCH_ASSOC);
 
                 $reqNotifiedCount = 0;
@@ -224,7 +237,10 @@ function detectAndTriggerEmergencyAlerts(PDO $pdo, $specificRequestId = null) {
 
                     if ($alreadyNotified === 0) {
                         $title = "🚨 EMERGENCY BLOOD ALERT: {$bg} Needed Urgently";
-                        $message = "🚨 EMERGENCY BLOOD ALERT: {$bg} blood is urgently needed. Current available stock: {$availableUnits} unit(s). Required: {$needed} unit(s). Location: {$facility}. Your registered blood group matches this requirement. ❤️ Your help could make a difference.";
+                        $compatNote = ($donor['blood_group'] === $bg)
+                            ? "Your registered blood group matches this requirement."
+                            : "Your registered blood group ({$donor['blood_group']}) is medically compatible to donate for {$bg} requirements.";
+                        $message = "🚨 EMERGENCY BLOOD ALERT: {$bg} blood is urgently needed. Current available stock: {$availableUnits} unit(s). Required: {$needed} unit(s). Location: {$facility}. {$compatNote} ❤️ Your help could make a difference.";
 
                         $stmtInsertNotif->execute([$donorId, $reqId, $title, $message]);
                         $reqNotifiedCount++;
@@ -288,6 +304,7 @@ function getActiveShortages(PDO $pdo) {
         FROM blood_requests br
         LEFT JOIN blood_banks bb ON br.bank_id = bb.bank_id
         WHERE br.status IN ('pending', 'donors_responding')
+          AND (br.emergency_alert_status IS NULL OR br.emergency_alert_status != 'resolved')
         HAVING units_available < br.units_needed
         ORDER BY br.priority_score DESC, br.request_date ASC
     ";
@@ -296,16 +313,6 @@ function getActiveShortages(PDO $pdo) {
         $stmt = $pdo->query($sql);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Attach matching verified available donor count for each shortage
-        $stmtCountDonors = $pdo->prepare("
-            SELECT COUNT(*) 
-            FROM donors 
-            WHERE blood_group = ? 
-              AND availability = 'available' 
-              AND verified = 'yes' 
-              AND donor_type IN ('blood', 'both')
-        ");
-
         $stmtCountAlerted = $pdo->prepare("
             SELECT COUNT(DISTINCT donor_id) 
             FROM donor_notifications 
@@ -313,7 +320,17 @@ function getActiveShortages(PDO $pdo) {
         ");
 
         foreach ($rows as &$r) {
-            $stmtCountDonors->execute([$r['blood_group']]);
+            $compatGroups = getCompatibleDonorBloodGroups($r['blood_group']);
+            $inSql = implode(',', array_fill(0, count($compatGroups), '?'));
+            $stmtCountDonors = $pdo->prepare("
+                SELECT COUNT(*) 
+                FROM donors 
+                WHERE blood_group IN ($inSql) 
+                  AND availability = 'available' 
+                  AND verified = 'yes' 
+                  AND donor_type IN ('blood', 'both')
+            ");
+            $stmtCountDonors->execute($compatGroups);
             $r['matching_donors_count'] = (int)$stmtCountDonors->fetchColumn();
             $r['deficit'] = max(0, (int)$r['units_needed'] - (int)$r['units_available']);
 
@@ -609,10 +626,35 @@ function addDonorNotificationSafe(PDO $pdo, $donorId, $title, $message, $type = 
 }
 
 /**
+ * Centralized blood group compatibility / matching rules for red blood cells.
+ * Returns array of donor blood groups compatible with the patient's blood group.
+ */
+function getCompatibleDonorBloodGroups($patientBloodGroup) {
+    $patientBg = strtoupper(trim($patientBloodGroup));
+    $matrix = [
+        'A+'  => ['A+', 'A-', 'O+', 'O-'],
+        'A-'  => ['A-', 'O-'],
+        'B+'  => ['B+', 'B-', 'O+', 'O-'],
+        'B-'  => ['B-', 'O-'],
+        'AB+' => ['AB+', 'AB-', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-'],
+        'AB-' => ['AB-', 'A-', 'B-', 'O-'],
+        'O+'  => ['O+', 'O-'],
+        'O-'  => ['O-']
+    ];
+    return $matrix[$patientBg] ?? [$patientBg];
+}
+
+/**
  * Centralized blood group compatibility / matching check
  */
 function isDonorCompatibleWithRequest($donorBloodGroup, $requiredBloodGroup) {
-    return strtoupper(trim($donorBloodGroup)) === strtoupper(trim($requiredBloodGroup));
+    $donorBg = strtoupper(trim($donorBloodGroup));
+    $reqBg = strtoupper(trim($requiredBloodGroup));
+    if ($donorBg === $reqBg) {
+        return true;
+    }
+    $compatibleGroups = getCompatibleDonorBloodGroups($reqBg);
+    return in_array($donorBg, $compatibleGroups, true);
 }
 
 /**
@@ -630,20 +672,22 @@ function getShortagesForDonorBloodGroup(PDO $pdo, $donorBloodGroup) {
             FROM blood_requests br
             LEFT JOIN blood_banks bb ON br.bank_id = bb.bank_id
             WHERE br.status IN ('pending', 'donors_responding')
-              AND br.blood_group = ?
+              AND (br.emergency_alert_status IS NULL OR br.emergency_alert_status != 'resolved')
             HAVING units_available < br.units_needed
             ORDER BY br.priority_score DESC, br.request_date ASC
         ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$donorBloodGroup]);
+        $stmt = $pdo->query($sql);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        foreach ($rows as &$r) {
-            $r['deficit'] = max(0, (int)$r['units_needed'] - (int)$r['units_available']);
+        $matching = [];
+        foreach ($rows as $r) {
+            if (isDonorCompatibleWithRequest($donorBloodGroup, $r['blood_group'])) {
+                $r['deficit'] = max(0, (int)$r['units_needed'] - (int)$r['units_available']);
+                $matching[] = $r;
+            }
         }
-        unset($r);
 
-        return $rows;
+        return $matching;
     } catch (Exception $e) {
         return [];
     }
@@ -702,12 +746,25 @@ function recordDonorEmergencyWillingness(PDO $pdo, $donorId, $requestId) {
             return ['success' => true, 'already_responded' => true, 'status' => $existing['status']];
         }
 
-        // Insert response
-        $stmtIns = $pdo->prepare("
-            INSERT INTO donor_responses (donor_id, request_id, patient_id, response, status, created_at)
-            VALUES (?, ?, ?, 'accepted', 'Willing to Donate', NOW())
-        ");
-        $stmtIns->execute([(int)$donorId, (int)$requestId, $req['patient_id']]);
+        // Insert response safely
+        try {
+            $stmtIns = $pdo->prepare("
+                INSERT INTO donor_responses (donor_id, request_id, patient_id, response, status, created_at)
+                VALUES (?, ?, ?, 'accepted', 'Willing to Donate', NOW())
+            ");
+            $stmtIns->execute([(int)$donorId, (int)$requestId, $req['patient_id']]);
+        } catch (PDOException $e) {
+            if ($e->getCode() == 23000) {
+                // If unique_donor_patient constraint exists and collides, insert with patient_id = NULL
+                $stmtInsNull = $pdo->prepare("
+                    INSERT INTO donor_responses (donor_id, request_id, patient_id, response, status, created_at)
+                    VALUES (?, ?, NULL, 'accepted', 'Willing to Donate', NOW())
+                ");
+                $stmtInsNull->execute([(int)$donorId, (int)$requestId]);
+            } else {
+                throw $e;
+            }
+        }
 
         // Transition blood_requests to 'donors_responding'
         $pdo->prepare("UPDATE blood_requests SET status = 'donors_responding' WHERE request_id = ? AND status = 'pending'")
@@ -802,6 +859,11 @@ function verifyEmergencyDonation(PDO $pdo, $responseId, $bankId, $units = 1) {
         $donorId = (int)$resp['donor_id'];
         $requestId = !empty($resp['request_id']) ? (int)$resp['request_id'] : null;
         $patientId = !empty($resp['patient_id']) ? (int)$resp['patient_id'] : null;
+        if (!$patientId && $requestId) {
+            $stmtPatLookup = $pdo->prepare("SELECT patient_id FROM blood_requests WHERE request_id = ?");
+            $stmtPatLookup->execute([$requestId]);
+            $patientId = (int)$stmtPatLookup->fetchColumn() ?: null;
+        }
         $bloodGroup = !empty($resp['blood_group']) ? $resp['blood_group'] : $resp['req_blood_group'];
 
         $stmtBank = $pdo->prepare("SELECT name FROM blood_banks WHERE bank_id = ?");

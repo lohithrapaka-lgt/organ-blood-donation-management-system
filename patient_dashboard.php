@@ -23,6 +23,9 @@ try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+    // Ensure emergency schema tables and columns are up to date
+    ensureBloodModuleSchema($pdo);
+
     $message = "";
     if (isset($_SESSION['success'])) {
         $message = $_SESSION['success'];
@@ -54,9 +57,9 @@ try {
                 $stmtPat = $pdo->prepare("UPDATE patients SET request_type='blood', organ_needed=NULL, `condition`=?, request_date=?, status='pending', priority_score=? WHERE patient_id=?");
                 $stmtPat->execute([$condition, $request_date, $priority_score, $patient_id]);
 
-                // Insert blood request using submitted patient_name directly
-                $stmt = $pdo->prepare("INSERT INTO blood_requests (patient_id, patient_name, age, blood_group, priority_score, units_needed, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
-                $stmt->execute([$patient_id, $name, $age, $blood_group, $priority_score, $units_needed]);
+                // Insert blood request with all required fields
+                $stmt = $pdo->prepare("INSERT INTO blood_requests (patient_id, patient_name, age, blood_group, priority_score, units_needed, status, request_date, emergency_alert_status) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, 'none')");
+                $stmt->execute([$patient_id, $name, $age, $blood_group, $priority_score, $units_needed, $request_date]);
                 $newBloodReqId = (int)$pdo->lastInsertId();
 
                 $pdo->commit();
