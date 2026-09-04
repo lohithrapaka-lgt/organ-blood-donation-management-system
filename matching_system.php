@@ -13,6 +13,9 @@ try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+    require_once 'emergency_alerts.php';
+    ensureBloodModuleSchema($pdo);
+
     // Minor DB Fix: The 'status' column in the patients schema did not originally support 'waiting_for_donor'.
     // minor DB Fix: The 'status' column in the patients schema dynamically altered
     // to ensure all statuses required by the state machine are available!
@@ -110,6 +113,14 @@ try {
                 } catch (Exception $e) {
                     $pdo->rollBack();
                 }
+            } else {
+                // Insufficient stock condition -> Trigger automatic emergency donor shortage alerts
+                if ($bloodReq) {
+                    detectAndTriggerEmergencyAlerts($pdo, (int)$bloodReq['request_id']);
+                } else {
+                    detectAndTriggerEmergencyAlerts($pdo);
+                }
+                echo "<p>Blood inventory insufficient for Patient ID: $pId. Emergency Donor Alert Engine triggered.</p>";
             }
         } elseif ($reqType === 'organ') {
             // Unconditionally update patient status to waiting_for_donor 

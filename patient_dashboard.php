@@ -17,6 +17,7 @@ $dbname = 'organ_blood_donation';
 $username = 'root';
 $password = '';
 require_once 'priority_calc.php';
+require_once 'emergency_alerts.php';
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
@@ -56,8 +57,21 @@ try {
                 // Insert blood request using submitted patient_name directly
                 $stmt = $pdo->prepare("INSERT INTO blood_requests (patient_id, patient_name, age, blood_group, priority_score, units_needed, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
                 $stmt->execute([$patient_id, $name, $age, $blood_group, $priority_score, $units_needed]);
+                $newBloodReqId = (int)$pdo->lastInsertId();
 
-                $message = "<div class='alert alert-success alert-dismissible fade show' role='alert'><i class='bi bi-check-circle-fill me-2'></i>Blood Request successfully logged for matching! <button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                $pdo->commit();
+
+                // Trigger automatic shortage detection & emergency donor alerts if stock is insufficient
+                $alertStats = detectAndTriggerEmergencyAlerts($pdo, $newBloodReqId);
+
+                if ($alertStats['shortages_detected'] > 0) {
+                    $message = "<div class='alert alert-warning alert-dismissible fade show' role='alert'><i class='bi bi-broadcast me-2 fs-5 text-danger pulse-glow'></i><strong>Blood Request Logged — Emergency Alert Activated!</strong> System stock is currently insufficient. {$alertStats['donors_notified']} compatible, verified, available donors have been automatically notified. <button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                } else {
+                    $message = "<div class='alert alert-success alert-dismissible fade show' role='alert'><i class='bi bi-check-circle-fill me-2'></i>Blood Request successfully logged for matching! Sufficient stock available in network. <button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                }
+                $_SESSION['success'] = $message;
+                header("Location: " . $_SERVER['PHP_SELF']);
+                exit();
             } elseif ($request_type === 'organ') {
                 $organ_type = trim($_POST['organ_type']);
                 $req_hospital_id = (int) $_POST['hospital_id'];
@@ -70,10 +84,12 @@ try {
                 $stmtPat = $pdo->prepare("UPDATE patients SET request_type='organ', organ_needed=?, `condition`=?, request_date=?, status='pending', priority_score=? WHERE patient_id=?");
                 $stmtPat->execute([$organ_type, $condition, $request_date, $priority_score, $patient_id]);
 
+                $pdo->commit();
                 $message = "<div class='alert alert-success alert-dismissible fade show' role='alert'><i class='bi bi-check-circle-fill me-2'></i>Organ Request successfully submitted to hospital queue!<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
+                $_SESSION['success'] = $message;
+                header("Location: " . $_SERVER['PHP_SELF']);
+                exit();
             }
-            $pdo->commit();
-            $_SESSION['success'] = $message;
         } catch (Exception $e) {
             $pdo->rollBack();
             $_SESSION['error'] = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>Error: " . htmlspecialchars($e->getMessage()) . "<button type='button' class='btn-close' data-bs-dismiss='alert'></button></div>";
