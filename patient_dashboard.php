@@ -74,7 +74,7 @@ try {
                 exit();
             } elseif ($request_type === 'organ') {
                 $organ_type = trim($_POST['organ_type']);
-                $req_hospital_id = (int) $_POST['hospital_id'];
+                $req_hospital_id = ($_POST['hospital_id'] === 'all') ? null : (int) $_POST['hospital_id'];
                 $priority_score = calculatePriority($age, $condition, 'organ', $organ_type, $request_date);
 
                 $stmtOrg = $pdo->prepare("INSERT INTO organ_requests (patient_id, hospital_id, organ_type, status, priority_score) VALUES (?, ?, ?, 'pending', ?)");
@@ -130,7 +130,7 @@ try {
     // However, we preserve functionality if the legacy hospital network buttons are still active.
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_organ'])) {
         $patient_id = $_SESSION['ref_id'];
-        $req_hospital_id = (int) $_POST['hospital_id'];
+        $req_hospital_id = ($_POST['hospital_id'] === 'all') ? null : (int) $_POST['hospital_id'];
         $organ_type = trim($_POST['organ_type']);
 
         $stmtAge = $pdo->prepare("SELECT age FROM patients WHERE patient_id = ?");
@@ -1125,9 +1125,11 @@ try {
                                         <label class="form-label fw-bold text-muted small">Target Hospital</label>
                                         <select name="hospital_id" id="hospitalSelect" class="form-select form-select-lg">
                                             <option value="" disabled selected>Select Nearest Hospital...</option>
-                                            <?php foreach ($hospitalDropdownList as $h): ?>
-                                                <option value="<?php echo $h['hospital_id']; ?>"><?php echo htmlspecialchars($h['name']); ?> (<?php echo htmlspecialchars($h['location']); ?>)</option>
-                                            <?php endforeach; ?>
+                                            <?php /* Added All Hospitals option */ ?>
+<option value="all">All Hospitals</option>
+<?php foreach ($hospitalDropdownList as $h): ?>
+    <option value="<?php echo $h['hospital_id']; ?>"><?php echo htmlspecialchars($h['name']); ?> (<?php echo htmlspecialchars($h['location']); ?>)</option>
+<?php endforeach; ?>
                                         </select>
                                     </div>
                                 </div>
