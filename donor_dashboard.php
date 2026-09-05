@@ -1436,6 +1436,7 @@ $myRegisteredCampIds = $stmtMyCamps->fetchAll(PDO::FETCH_COLUMN);
                                             <th>Facility Name</th>
                                             <th>Donation Date</th>
                                             <th>Status</th>
+                                            <th>Feedback</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1451,6 +1452,23 @@ $myRegisteredCampIds = $stmtMyCamps->fetchAll(PDO::FETCH_COLUMN);
                                                 <td class="text-muted"><i class="bi bi-building me-1"></i><?php echo htmlspecialchars($don['facility_name']); ?></td>
                                                 <td><small class="text-muted"><?php echo date('d M Y, h:i A', strtotime($don['donation_date'])); ?></small></td>
                                                 <td><span class="badge bg-success rounded-pill px-3 py-1"><i class="bi bi-patch-check-fill me-1"></i>VERIFIED</span></td>
+                                                <td>
+                                                    <form method="POST" action="submit_feedback.php" class="d-flex gap-1 align-items-center">
+                                                        <input type="hidden" name="submit_feedback" value="1">
+                                                        <input type="hidden" name="donation_id" value="<?php echo (int)$don['donation_id']; ?>">
+                                                        <input type="hidden" name="redirect" value="donor_dashboard.php">
+                                                        <select name="rating" class="form-select form-select-sm" required aria-label="Rating">
+                                                            <option value="">Rate</option>
+                                                            <option value="5">5</option>
+                                                            <option value="4">4</option>
+                                                            <option value="3">3</option>
+                                                            <option value="2">2</option>
+                                                            <option value="1">1</option>
+                                                        </select>
+                                                        <input type="text" name="feedback" class="form-control form-control-sm" maxlength="1000" placeholder="Feedback" aria-label="Feedback">
+                                                        <button type="submit" class="btn btn-outline-success btn-sm" aria-label="Submit feedback"><i class="bi bi-send"></i></button>
+                                                    </form>
+                                                </td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
@@ -1986,6 +2004,8 @@ $myRegisteredCampIds = $stmtMyCamps->fetchAll(PDO::FETCH_COLUMN);
             }
         }
     </script>
+
+    <?php require 'chatbot.php'; ?>
 </body>
 
 </html>

@@ -587,6 +587,31 @@ try {
                                                     <i class="bi bi-printer me-2"></i>Print Receipt / Verification
                                                 </a>
                                             </div>
+                                            <form method="POST" action="submit_feedback.php" class="mt-4 pt-3 border-top">
+                                                <input type="hidden" name="submit_feedback" value="1">
+                                                <input type="hidden" name="request_id" value="<?php echo $reqId; ?>">
+                                                <input type="hidden" name="redirect" value="patient_dashboard.php">
+                                                <div class="row g-2 align-items-end">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-bold">Rate this blood bank</label>
+                                                        <select name="rating" class="form-select form-select-sm" required>
+                                                            <option value="">Rating</option>
+                                                            <option value="5">5 - Excellent</option>
+                                                            <option value="4">4 - Good</option>
+                                                            <option value="3">3 - Average</option>
+                                                            <option value="2">2 - Poor</option>
+                                                            <option value="1">1 - Very poor</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-bold">Feedback (optional)</label>
+                                                        <input type="text" name="feedback" class="form-control form-control-sm" maxlength="1000" placeholder="Share your experience">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <button type="submit" class="btn btn-outline-success btn-sm w-100"><i class="bi bi-star-fill me-1"></i>Submit Feedback</button>
+                                                    </div>
+                                                </div>
+                                            </form>
                                         </div>
                                     </div>
                                 </div>
@@ -784,6 +809,31 @@ try {
                                                     <i class="bi bi-printer me-2"></i>Print Receipt / Verification
                                                 </a>
                                             </div>
+                                            <form method="POST" action="submit_feedback.php" class="mt-4 pt-3 border-top">
+                                                <input type="hidden" name="submit_feedback" value="1">
+                                                <input type="hidden" name="request_id" value="<?php echo $oReqId; ?>">
+                                                <input type="hidden" name="redirect" value="patient_dashboard.php">
+                                                <div class="row g-2 align-items-end">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-bold">Rate this hospital</label>
+                                                        <select name="rating" class="form-select form-select-sm" required>
+                                                            <option value="">Rating</option>
+                                                            <option value="5">5 - Excellent</option>
+                                                            <option value="4">4 - Good</option>
+                                                            <option value="3">3 - Average</option>
+                                                            <option value="2">2 - Poor</option>
+                                                            <option value="1">1 - Very poor</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-bold">Feedback (optional)</label>
+                                                        <input type="text" name="feedback" class="form-control form-control-sm" maxlength="1000" placeholder="Share your experience">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <button type="submit" class="btn btn-outline-success btn-sm w-100"><i class="bi bi-star-fill me-1"></i>Submit Feedback</button>
+                                                    </div>
+                                                </div>
+                                            </form>
                                         </div>
                                     </div>
                                 </div>
@@ -1798,6 +1848,8 @@ try {
             }
         });
     </script>
+
+    <?php require 'chatbot.php'; ?>
 </body>
 
 </html>
