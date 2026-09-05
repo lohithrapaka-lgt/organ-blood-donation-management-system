@@ -232,7 +232,7 @@ try {
             <div class="col-md-8 col-lg-6">
                 <div class="register-card">
                     <div class="register-header">
-                        <h2 class="fw-bold mb-1"><i class="bi bi-heart-pulse-fill me-2"></i>Join MediMatch</h2>
+                        <h2 class="fw-bold mb-1"><i class="bi bi-heart-pulse-fill me-2"></i><span data-i18n="register" data-i18n-english="Join MediMatch">Join MediMatch</span></h2>
                         <p class="mb-0 opacity-75">Register as Patient, Donor, or Institution</p>
                     </div>
                     <div class="p-4 p-md-5">
@@ -260,15 +260,15 @@ try {
 
                                 <!-- COMMON FIELDS -->
                                 <div class="mb-3">
-                                    <label class="form-label">Role</label>
+                                    <label class="form-label" data-i18n="role" data-i18n-english="Role">Role</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-end-0"><i
                                                 class="bi bi-person-badge text-muted"></i></span>
                                         <select name="role" id="roleSelect" class="form-select border-start-0" required
                                             onchange="toggleSections()">
-                                            <option value="" disabled selected>Select your role...</option>
-                                            <option value="patient" <?php echo (isset($_POST['role']) && $_POST['role'] == 'patient') ? 'selected' : ''; ?>>Patient</option>
-                                            <option value="donor" <?php echo (isset($_POST['role']) && $_POST['role'] == 'donor') ? 'selected' : ''; ?>>Donor</option>
+                                            <option value="" disabled selected data-i18n="selectRole" data-i18n-english="Select your role...">Select your role...</option>
+                                            <option value="patient" <?php echo (isset($_POST['role']) && $_POST['role'] == 'patient') ? 'selected' : ''; ?> data-i18n="patient" data-i18n-english="Patient">Patient</option>
+                                            <option value="donor" <?php echo (isset($_POST['role']) && $_POST['role'] == 'donor') ? 'selected' : ''; ?> data-i18n="donor" data-i18n-english="Donor">Donor</option>
                                             <option value="hospital" <?php echo (isset($_POST['role']) && $_POST['role'] == 'hospital') ? 'selected' : ''; ?>>Hospital</option>
                                             <option value="bloodbank" <?php echo (isset($_POST['role']) && $_POST['role'] == 'bloodbank') ? 'selected' : ''; ?>>Blood Bank</option>
                                             <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] == 'admin') ? 'selected' : ''; ?>>Admin</option>
@@ -277,7 +277,7 @@ try {
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label">Email Address</label>
+                                    <label class="form-label" data-i18n="email" data-i18n-english="Email Address">Email Address</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-end-0"><i
                                                 class="bi bi-envelope text-muted"></i></span>
@@ -288,7 +288,7 @@ try {
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">Password</label>
+                                    <label class="form-label" data-i18n="password" data-i18n-english="Password">Password</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-end-0"><i
                                                 class="bi bi-lock text-muted"></i></span>
@@ -300,21 +300,21 @@ try {
                                 <!-- DYNAMIC SECTION: PATIENT & DONOR -->
                                 <div id="section-person" class="dynamic-section">
                                     <h6 class="fw-bold mb-3 text-primary"><i
-                                            class="bi bi-person-lines-fill me-2"></i>Personal Details</h6>
+                                            class="bi bi-person-lines-fill me-2"></i><span data-i18n="personalDetails" data-i18n-english="Personal Details">Personal Details</span></h6>
 
                                     <div class="mb-3">
-                                        <label class="form-label">Full Name</label>
+                                        <label class="form-label" data-i18n="fullName" data-i18n-english="Full Name">Full Name</label>
                                         <input type="text" name="name" id="person_name" class="form-control"
                                             placeholder="John Doe">
                                     </div>
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
-                                            <label class="form-label">Age</label>
+                                            <label class="form-label" data-i18n="age" data-i18n-english="Age">Age</label>
                                             <input type="number" name="age" id="person_age" class="form-control"
                                                 placeholder="Years" min="1" max="150">
                                         </div>
                                         <div class="col-md-6 mb-3">
-                                            <label class="form-label">Blood Group</label>
+                                            <label class="form-label" data-i18n="bloodGroup" data-i18n-english="Blood Group">Blood Group</label>
                                             <select name="blood_group" id="person_blood" class="form-select">
                                                 <option value="" disabled selected>Select...</option>
                                                 <option value="A+">A+</option>
@@ -408,7 +408,7 @@ try {
                                 </div>
 
                                 <button type="submit" name="register" class="btn btn-register mt-2">
-                                    Complete Registration <i class="bi bi-arrow-right-circle ms-1"></i>
+                                    <span data-i18n="completeRegistration" data-i18n-english="Complete Registration">Complete Registration</span> <i class="bi bi-arrow-right-circle ms-1"></i>
                                 </button>
 
                                 <p class="text-center mt-4 text-muted small">
@@ -484,6 +484,7 @@ try {
             }
         });
     </script>
+    <?php require 'language_switcher.php'; ?>
 </body>
 
 </html>

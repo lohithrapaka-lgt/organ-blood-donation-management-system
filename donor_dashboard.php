@@ -804,18 +804,18 @@ $myRegisteredCampIds = $stmtMyCamps->fetchAll(PDO::FETCH_COLUMN);
         <div class="col-md-3 col-lg-2 sidebar-wrapper d-none d-md-block">
             <div class="text-center px-3 mb-4">
                 <h3 class="fw-bold text-danger mb-1"><i class="bi bi-heart-pulse-fill me-2"></i>MediMatch</h3>
-                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-1 fw-bold">Donor Portal</span>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-1 fw-bold" data-i18n="donorPortal" data-i18n-english="Donor Portal">Donor Portal</span>
             </div>
 
             <div class="px-3">
                 <div class="nav-link-custom active" onclick="showSection('dashboard-section', this)">
-                    <i class="bi bi-grid-fill me-3 fs-5"></i> Dashboard
+                    <i class="bi bi-grid-fill me-3 fs-5"></i> <span data-i18n="dashboard" data-i18n-english="Dashboard">Dashboard</span>
                 </div>
                 <div class="nav-link-custom" onclick="showSection('rewards-section', this)">
-                    <i class="bi bi-gift-fill me-3 fs-5 text-warning"></i> Rewards & Gifts
+                    <i class="bi bi-gift-fill me-3 fs-5 text-warning"></i> <span data-i18n="rewards" data-i18n-english="Rewards & Gifts">Rewards & Gifts</span>
                 </div>
                 <div class="nav-link-custom" onclick="showSection('history-section', this)">
-                    <i class="bi bi-journal-check me-3 fs-5 text-success"></i> Donation History
+                    <i class="bi bi-journal-check me-3 fs-5 text-success"></i> <span data-i18n="donationHistory" data-i18n-english="Donation History">Donation History</span>
                 </div>
                 <div class="nav-link-custom" onclick="showSection('achievements-section', this)">
                     <i class="bi bi-trophy-fill me-3 fs-5 text-primary"></i> Achievements
@@ -824,7 +824,7 @@ $myRegisteredCampIds = $stmtMyCamps->fetchAll(PDO::FETCH_COLUMN);
                     <i class="bi bi-people-fill me-3 fs-5 text-info"></i> Refer & Earn
                 </div>
                 <div class="nav-link-custom" onclick="showSection('profile-section', this)">
-                    <i class="bi bi-person-fill me-3 fs-5"></i> Profile & Availability
+                    <i class="bi bi-person-fill me-3 fs-5"></i> <span data-i18n="profileAvailability" data-i18n-english="Profile & Availability">Profile & Availability</span>
                 </div>
                 <div class="nav-link-custom" onclick="showSection('camps-section', this)">
                     <i class="bi bi-geo-alt-fill me-3 fs-5"></i> Blood Camps
@@ -2006,6 +2006,7 @@ $myRegisteredCampIds = $stmtMyCamps->fetchAll(PDO::FETCH_COLUMN);
     </script>
 
     <?php require 'chatbot.php'; ?>
+    <?php require 'language_switcher.php'; ?>
 </body>
 
 </html>

@@ -223,5 +223,6 @@ if ($request_id > 0 && !empty($user_token) && hash_equals($expected_token, $user
             </div>
         <?php endif; ?>
     </div>
+    <?php require 'language_switcher.php'; ?>
 </body>
 </html>

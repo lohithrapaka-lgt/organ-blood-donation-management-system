@@ -375,15 +375,15 @@ try {
         <div class="col-md-3 col-lg-2 sidebar-wrapper d-none d-md-block">
             <div class="text-center px-3 mb-5">
                 <h3 class="fw-bold text-dark"><i class="bi bi-heart-pulse-fill text-danger me-2"></i>MediMatch</h3>
-                <span class="badge bg-light text-secondary rounded-pill px-3 shadow-sm border">Patient Portal</span>
+                <span class="badge bg-light text-secondary rounded-pill px-3 shadow-sm border" data-i18n="patientPortal" data-i18n-english="Patient Portal">Patient Portal</span>
             </div>
 
             <div class="px-3">
                 <div class="nav-link-custom active" onclick="showSection('dashboard-section', this)">
-                    <i class="bi bi-grid-fill me-3 fs-5"></i> Dashboard
+                    <i class="bi bi-grid-fill me-3 fs-5"></i> <span data-i18n="dashboard" data-i18n-english="Dashboard">Dashboard</span>
                 </div>
                 <div class="nav-link-custom" onclick="showSection('profile-section', this)">
-                    <i class="bi bi-person-fill me-3 fs-5"></i> My Profile
+                    <i class="bi bi-person-fill me-3 fs-5"></i> <span data-i18n="myProfile" data-i18n-english="My Profile">My Profile</span>
                 </div>
                 <div class="nav-link-custom" onclick="showSection('request-section', this)">
                     <i class="bi bi-droplet-half me-3 fs-5"></i> Submit Blood Request
@@ -400,7 +400,7 @@ try {
 
                 <a href="logout.php"
                     class="nav-link-custom text-danger text-decoration-none border border-danger border-opacity-25 rounded bg-danger bg-opacity-10 mt-auto">
-                    <i class="bi bi-box-arrow-right me-3 fs-5"></i> Logout
+                    <i class="bi bi-box-arrow-right me-3 fs-5"></i> <span data-i18n="logout" data-i18n-english="Logout">Logout</span>
                 </a>
             </div>
         </div>
@@ -1850,6 +1850,7 @@ try {
     </script>
 
     <?php require 'chatbot.php'; ?>
+    <?php require 'language_switcher.php'; ?>
 </body>
 
 </html>

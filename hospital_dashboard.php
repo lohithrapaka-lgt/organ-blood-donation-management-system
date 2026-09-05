@@ -1055,6 +1055,7 @@ try {
                 .replace(/'/g, '&#039;');
         }
     </script>
+    <?php require 'language_switcher.php'; ?>
 </body>
 
 </html>

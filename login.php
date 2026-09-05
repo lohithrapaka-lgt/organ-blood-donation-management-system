@@ -142,8 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <div class="container d-flex flex-column align-items-center justify-content-center">
         <div class="login-card">
             <div class="login-header">
-                <h2 class="fw-bold mb-1"><i class="bi bi-shield-lock-fill me-2"></i>Welcome Back</h2>
-                <p class="mb-0 opacity-75">Sign in to your account</p>
+                <h2 class="fw-bold mb-1"><i class="bi bi-shield-lock-fill me-2"></i><span data-i18n="welcomeBack" data-i18n-english="Welcome Back">Welcome Back</span></h2>
+                <p class="mb-0 opacity-75" data-i18n="signIn" data-i18n-english="Sign in to your account">Sign in to your account</p>
             </div>
             <div class="p-4 p-md-5">
 
@@ -158,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 
                 <form action="login.php" method="POST">
                     <div class="mb-4">
-                        <label class="form-label">Email Address</label>
+                        <label class="form-label" data-i18n="email" data-i18n-english="Email Address">Email Address</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i
                                     class="bi bi-envelope text-muted"></i></span>
@@ -169,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label">Password</label>
+                        <label class="form-label" data-i18n="password" data-i18n-english="Password">Password</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i
                                     class="bi bi-lock text-muted"></i></span>
@@ -179,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                     </div>
 
                     <button type="submit" name="login" class="btn btn-login mt-2">
-                        Login <i class="bi bi-box-arrow-in-right ms-1"></i>
+                        <span data-i18n="submitLogin" data-i18n-english="Login">Login</span> <i class="bi bi-box-arrow-in-right ms-1"></i>
                     </button>
 
                     <p class="text-center mt-4 text-muted small">
@@ -196,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <?php require 'language_switcher.php'; ?>
 </body>
 
 </html>

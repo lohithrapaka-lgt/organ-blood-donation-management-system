@@ -2216,6 +2216,7 @@ $initialSection = isset($_GET['section']) ? htmlspecialchars($_GET['section']) :
         .rounded-top-4 { border-radius: 1rem 1rem 0 0 !important; }
         .rounded-bottom-4 { border-radius: 0 0 1rem 1rem !important; }
     </style>
+    <?php require 'language_switcher.php'; ?>
 </body>
 </html>
 

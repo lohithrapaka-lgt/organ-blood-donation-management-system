@@ -1039,6 +1039,7 @@ try {
             });
         }
     </script>
+    <?php require 'language_switcher.php'; ?>
 </body>
 
 </html>

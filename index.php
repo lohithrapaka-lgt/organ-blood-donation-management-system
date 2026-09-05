@@ -519,12 +519,12 @@ session_start();
                 <i class="fas fa-heartbeat"></i> MediMatch
             </a>
             <div class="nav-links">
-                <a href="#home">Home</a>
-                <a href="#about">About</a>
-                <a href="#features">Features</a>
-                <a href="#contact">Contact</a>
-                <a href="login.php">Login</a>
-                <a href="register.php" class="nav-btn">Register</a>
+                <a href="#home" data-i18n="home" data-i18n-english="Home">Home</a>
+                <a href="#about" data-i18n="about" data-i18n-english="About">About</a>
+                <a href="#features" data-i18n="features" data-i18n-english="Features">Features</a>
+                <a href="#contact" data-i18n="contact" data-i18n-english="Contact">Contact</a>
+                <a href="login.php" data-i18n="login" data-i18n-english="Login">Login</a>
+                <a href="register.php" class="nav-btn" data-i18n="register" data-i18n-english="Register">Register</a>
             </div>
         </div>
     </header>
@@ -533,14 +533,14 @@ session_start();
     <section class="hero" id="home">
         <div class="container hero-content">
             <h1>MediMatch</h1>
-            <h3 style="color: #555; margin-bottom: 15px; font-weight: 600;">Smart Organ & Blood Donation Management System</h3>
+            <h3 style="color: #555; margin-bottom: 15px; font-weight: 600;" data-i18n="smartSystem" data-i18n-english="Smart Organ & Blood Donation Management System">Smart Organ & Blood Donation Management System</h3>
             <p>Connecting Donors, Patients, and Hospitals to Save Lives. Join our network of donors, patients, and healthcare providers to make a life-changing impact today.</p>
             <div class="hero-btns">
                 <a href="login.php" class="btn btn-primary">
-                    <i class="fas fa-sign-in-alt"></i> Get Started
+                    <i class="fas fa-sign-in-alt"></i> <span data-i18n="getStarted" data-i18n-english="Get Started">Get Started</span>
                 </a>
                 <a href="register.php" class="btn btn-secondary">
-                    <i class="fas fa-user-plus"></i> Register Now
+                    <i class="fas fa-user-plus"></i> <span data-i18n="registerNow" data-i18n-english="Register Now">Register Now</span>
                 </a>
             </div>
         </div>
@@ -550,7 +550,7 @@ session_start();
     <section class="roles" id="roles">
         <div class="container">
             <div class="section-title">
-                <h2>Access Portals</h2>
+                <h2 data-i18n="accessPortals" data-i18n-english="Access Portals">Access Portals</h2>
                 <div class="divider"></div>
             </div>
             
@@ -735,5 +735,6 @@ session_start();
             });
         });
     </script>
+    <?php require 'language_switcher.php'; ?>
 </body>
 </html>

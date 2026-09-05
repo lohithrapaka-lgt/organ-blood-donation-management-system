@@ -392,5 +392,6 @@ if ($reportData) {
             });
         }
     </script>
+    <?php require 'language_switcher.php'; ?>
 </body>
 </html>
